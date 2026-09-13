@@ -34,6 +34,8 @@ export async function sendSupabaseMagicLink(email: string, redirectTo: string) {
 
   return client.auth.signInWithOtp({
     email,
-    options: { shouldCreateUser: false, emailRedirectTo: redirectTo },
+    // Account creation is still invite-only: the Before User Created hook
+    // rejects any email without an active row in public.invites.
+    options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
   })
 }
