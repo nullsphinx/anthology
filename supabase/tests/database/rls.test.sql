@@ -1,10 +1,36 @@
 begin;
-select plan(9);
+select plan(13);
+
+insert into public.invites (email)
+values ('owner@example.test'), ('invited@example.test'), ('expired@example.test');
+update public.invites set expires_at = now() - interval '1 minute' where email = 'expired@example.test';
+
+select is(
+  public.hook_allow_invited_user('{"user":{"email":"INVITED@example.test"}}'::jsonb),
+  '{}'::jsonb,
+  'the auth hook allows a non-expired invited email case-insensitively'
+);
+select is(
+  public.hook_allow_invited_user('{"user":{"email":"uninvited@example.test"}}'::jsonb) -> 'error' ->> 'http_code',
+  '403',
+  'the auth hook rejects an uninvited email'
+);
+select is(
+  public.hook_allow_invited_user('{"user":{"email":"expired@example.test"}}'::jsonb) -> 'error' ->> 'http_code',
+  '403',
+  'the auth hook rejects an expired invitation'
+);
 
 insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at)
 values
   ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner@example.test', '', now(), now(), now()),
   ('00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'other@example.test', '', now(), now(), now());
+
+select is(
+  (select claimed_by from public.invites where email = 'owner@example.test'),
+  '00000000-0000-0000-0000-000000000001'::uuid,
+  'creating an invited user claims their invitation'
+);
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}', true);

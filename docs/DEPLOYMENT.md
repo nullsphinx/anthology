@@ -20,9 +20,9 @@ In Supabase Dashboard → Authentication → URL Configuration, set:
 - Site URL: `https://anthologyshelf.com`
 - Redirect URLs: `https://anthologyshelf.com/auth/callback` and `http://127.0.0.1:4173/auth/callback`
 
-For the invite-only alpha, disable public email signups and invite users from Authentication → Users. The client already sets `shouldCreateUser: false`, providing a second guard.
+For the invite-only alpha, keep both general user creation and the Email provider enabled so passwordless sign-in can issue magic links. Enforce private access with the configured Before User Created Postgres hook: it permits only non-expired, unclaimed emails in `public.invites`. Add the allowlist row before inviting a user. The client also sets `shouldCreateUser: false` so its sign-in form never requests account creation.
 
-Google OAuth is intentionally off by default. When ready, configure Google's OAuth credentials in Supabase, add Supabase's displayed callback URL in Google Cloud, and set `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true` in Vercel. Before enabling it for an invite-only alpha, add a Supabase Before User Created hook that checks the `public.invites` allowlist.
+Google OAuth is intentionally off by default. When ready, configure Google's OAuth credentials in Supabase, add Supabase's displayed callback URL in Google Cloud, and set `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true` in Vercel. The existing Before User Created hook will apply the same `public.invites` allowlist to new OAuth users.
 
 ## 2. Create and configure Vercel
 
