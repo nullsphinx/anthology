@@ -5,7 +5,7 @@ import { BookOpen, LoaderCircle, LogIn, Mail, ShieldCheck } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { App } from './App'
 import type { Profile } from './domain'
-import { getSupabaseBrowserClient, isSupabaseConfigured } from './lib/supabase/client'
+import { getSupabaseBrowserClient, isSupabaseConfigured, sendSupabaseMagicLink } from './lib/supabase/client'
 
 type StoredProfile = {
   user_id: string
@@ -29,14 +29,26 @@ function SignedOut() {
   const [busy, setBusy] = useState(false)
   const googleEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
 
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('auth_error') === 'expired_or_invalid') {
+      setMessage('That sign-in link is invalid or has expired. Request a new link and use the newest email.')
+      url.searchParams.delete('auth_error')
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+    }
+  }, [])
+
   const sendLink = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setMessage('')
-    const client = getSupabaseBrowserClient()!
-    const { error } = await client.auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: false, emailRedirectTo: `${window.location.origin}/auth/callback` },
-    })
-    setMessage(error ? (error.message.includes('Signups not allowed') ? 'This private alpha requires an invitation.' : error.message) : 'Check your email for a secure sign-in link.')
+    const { error } = await sendSupabaseMagicLink(email.trim(), `${window.location.origin}/auth/callback`)
+    const rateLimited = error?.code === 'over_email_send_rate_limit' || error?.message.toLowerCase().includes('rate limit')
+    setMessage(error
+      ? rateLimited
+        ? 'Too many sign-in links were requested. Please wait a few minutes, then request one new link.'
+        : error.message.includes('Signups not allowed')
+          ? 'This private alpha requires an invitation.'
+          : error.message
+      : 'Check your email for a secure sign-in link.')
     setBusy(false)
   }
 
