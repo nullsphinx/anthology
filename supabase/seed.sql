@@ -1,0 +1,1 @@
+-- Production catalog data is fetched from providers on demand. No fake catalog rows are seeded.

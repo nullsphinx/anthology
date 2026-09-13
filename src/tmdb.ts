@@ -229,7 +229,8 @@ export async function browseTmdbCatalog(options: BrowseCatalogOptions, signal?: 
   const perType = Math.ceil(options.pageSize / supported.length)
   const start = (safePage - 1) * perType
   const results = await Promise.all(supported.map((type) => fetchTypeWindow(type, options, start, perType, signal)))
-  const merged = localOrder(results.flatMap((result) => result.items), options.sort ?? 'popular', options.query?.trim())
+  const unique = [...new Map(results.flatMap((result) => result.items).map((item) => [item.id, item])).values()]
+  const merged = localOrder(unique, options.sort ?? 'popular', options.query?.trim())
   return {
     items: merged.slice(0, options.pageSize),
     hasNext: results.some((result) => result.hasNext),

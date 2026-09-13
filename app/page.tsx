@@ -1,5 +1,5 @@
-import { App } from '../src/App'
+import { AuthGate } from '../src/AuthGate'
 
 export default function HomePage() {
-  return <App />
+  return <AuthGate />
 }

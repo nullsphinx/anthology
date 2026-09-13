@@ -11,10 +11,12 @@ import {
   type MediaItem,
   type ShelfState,
 } from './domain'
+import { loadRemoteShelf, removeRemoteEntry, saveRemoteEntry } from './lib/supabase/shelf'
 
 const STORAGE_KEY = 'media-shelf-prototype-v2'
 
 function loadState(): ShelfState {
+  if (typeof window === 'undefined') return structuredClone(initialState)
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY)
     if (saved) {
@@ -48,12 +50,27 @@ function upsertItem(items: MediaItem[], item: MediaItem): MediaItem[] {
     : [...items, item]
 }
 
-export function useMediaShelf() {
+export function useMediaShelf(remoteUserId?: string) {
   const [state, setState] = useState<ShelfState>(loadState)
+  const [remoteLoading, setRemoteLoading] = useState(Boolean(remoteUserId))
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  }, [state])
+    if (!remoteUserId) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  }, [remoteUserId, state])
+
+  useEffect(() => {
+    if (!remoteUserId) { setRemoteLoading(false); return }
+    let active = true
+    setRemoteLoading(true)
+    loadRemoteShelf(remoteUserId)
+      .then(({ items, entries }) => {
+        if (active) setState({ currentUserId: remoteUserId, items, entries, activities: [] })
+      })
+      .catch(() => { if (active) setSyncError('Your saved library could not be loaded. Try refreshing.') })
+      .finally(() => { if (active) setRemoteLoading(false) })
+    return () => { active = false }
+  }, [remoteUserId])
 
   const currentEntries = useMemo(
     () => state.entries.filter((entry) => entry.userId === state.currentUserId),
@@ -68,6 +85,7 @@ export function useMediaShelf() {
     setState((previous) => {
       const existing = getEntry(previous.entries, previous.currentUserId, item.id)
       const next = { ...updater(existing ?? createEntry(previous.currentUserId, item.id)), updatedAt: new Date().toISOString() }
+      if (remoteUserId) queueMicrotask(() => saveRemoteEntry(item, next).catch(() => setSyncError('A library change could not be saved. Please try again.')))
       const entries = existing
         ? previous.entries.map((entry) => entry.userId === previous.currentUserId && entry.itemId === item.id ? next : entry)
         : [...previous.entries, next]
@@ -85,15 +103,20 @@ export function useMediaShelf() {
         }, ...previous.activities].slice(0, 80) : previous.activities,
       }
     })
-  }, [])
+  }, [remoteUserId])
 
   const setCurrentUser = useCallback((currentUserId: string) => {
+    if (remoteUserId) return
     setState((previous) => ({ ...previous, currentUserId }))
-  }, [])
+  }, [remoteUserId])
 
   const saveItemDetails = useCallback((item: MediaItem) => {
-    setState((previous) => ({ ...previous, items: upsertItem(previous.items, item) }))
-  }, [])
+    setState((previous) => {
+      const entry = getEntry(previous.entries, previous.currentUserId, item.id)
+      if (remoteUserId && entry) queueMicrotask(() => saveRemoteEntry(item, entry).catch(() => setSyncError('Updated title details could not be saved.')))
+      return { ...previous, items: upsertItem(previous.items, item) }
+    })
+  }, [remoteUserId])
 
   const setStatus = useCallback((item: MediaItem, status: LibraryStatus) => {
     updateEntry(item, (entry) => {
@@ -175,16 +198,19 @@ export function useMediaShelf() {
 
   const removeItem = useCallback((itemId: string) => {
     setState((previous) => {
+      const item = previous.items.find((candidate) => candidate.id === itemId)
+      if (remoteUserId && item) queueMicrotask(() => removeRemoteEntry(item).catch(() => setSyncError('The title could not be removed. Please try again.')))
       const entries = previous.entries.filter((entry) => !(entry.userId === previous.currentUserId && entry.itemId === itemId))
       const stillReferenced = entries.some((entry) => entry.itemId === itemId)
       return { ...previous, entries, items: stillReferenced ? previous.items : previous.items.filter((item) => item.id !== itemId) }
     })
-  }, [])
+  }, [remoteUserId])
 
   const resetShelf = useCallback(() => {
+    if (remoteUserId) return
     window.localStorage.removeItem(STORAGE_KEY)
     setState(structuredClone(initialState))
-  }, [])
+  }, [remoteUserId])
 
   return {
     state,
@@ -198,5 +224,8 @@ export function useMediaShelf() {
     toggleSeason,
     removeItem,
     resetShelf,
+    remoteLoading,
+    syncError,
+    clearSyncError: () => setSyncError(null),
   }
 }

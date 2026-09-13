@@ -1,72 +1,70 @@
 # Anthology
 
-A working, local-first prototype for discovering and tracking movies, television, books, and albums in one table. It supports planned, in-progress, paused, completed, and dropped states; manual or episode-level progress; half-star ratings; rewatches, rereads, and repeat listens; group overlap; and personal statistics.
+Anthology is an open-source, unified shelf for movies, television, books, and albums. It combines comprehensive provider-backed discovery with private personal tracking: planned, in progress, paused, completed, and dropped states; progress; ratings; episode tracking; repeat completions; group overlap; and personal recaps.
+
+The project is currently an invite-only alpha. The catalog is real and searchable; authenticated shelf data persists in Postgres with row-level security.
+
+## Stack
+
+- Next.js 16 App Router, React 19, and TypeScript
+- Supabase Postgres, Auth, and row-level security
+- TMDB for movies and television, with Cinemeta fallback
+- Open Library for books
+- MusicBrainz, ListenBrainz, and Cover Art Archive for albums
+- Vercel deployment and GitHub Actions CI
+
+Provider responses are normalized into a shared `MediaItem` model. Catalog metadata and user-owned library state remain separate, and all credentialed provider requests run through allowlisted server routes.
 
 ## Run locally
 
-Requirements: Node.js 22 or newer, npm, and an internet connection for live catalog metadata and poster images.
+Requirements: Node.js 22+, npm, Docker, and an internet connection.
 
 ```bash
 npm install
+npm run db:start
+cp .env.example .env.local
+```
+
+Use the public local values printed by `npm run db:start` for `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Do not copy the local secret key or service-role key into the browser configuration.
+
+For TMDB on macOS, run `zsh scripts/configure-tmdb.sh`; it stores the read token in Keychain. On other systems, put `TMDB_READ_ACCESS_TOKEN` in the ignored `.env.local` file.
+
+```bash
 npm run dev
 ```
 
-Open [http://127.0.0.1:4173](http://127.0.0.1:4173).
+Open [http://127.0.0.1:4173](http://127.0.0.1:4173). If Supabase variables are absent, Anthology runs in local demo mode and stores its simulated profiles in browser local storage.
 
 ## Verify
 
 ```bash
+npm run db:reset
+npm run db:test
 npm test
 npm run build
 ```
 
-## Live catalog behavior
+The database tests create isolated users and assert owner access plus cross-user privacy. The application tests cover statuses, progress, episode accounting, ratings, overlap, and recap calculations.
 
-- Uses TMDB as the primary movie and TV catalog when `TMDB_READ_ACCESS_TOKEN` or `TMDB_API_KEY` is configured server-side.
-- Uses Open Library's full-text work index and cover service for books, with no client-side API credential.
-- Uses MusicBrainz's release-group index for comprehensive album and artist search.
-- Uses ListenBrainz for the most-listened album landing pages and the Cover Art Archive for real album artwork.
-- Falls back automatically to Cinemeta when TMDB is not configured or temporarily unavailable, so the prototype remains usable.
-- Loads at most 100 records per page and divides that budget evenly across the selected live media types.
-- Searches the providers' full indexes as the user types, so a title does not need to appear on a browse page to be discoverable.
-- Uses TMDB discovery endpoints for genre, exact release year, popularity, top-rated, and alphabetical ordering.
-- Uses Open Library search filters for subject, first publication year, popularity, community rating, and title ordering.
-- Uses MusicBrainz search fields for album title, artist, genre tag, release year, and page-local alphabetical ordering.
-- Uses real cover images, identifiers, release data, genres, authors or credits, summaries, community ratings, runtimes, seasons, and released episode counts when available.
-- Fetches a full metadata record only when a title is opened.
-- Stores only titles added to a user's shelf in browser `localStorage`.
-- Requires no embedded API secret.
+## Repository map
 
-TMDB's official API supplies the primary movie, television, image, search, and discovery data. Open Library supplies book works, ratings, and covers. MusicBrainz supplies album release groups, ratings, and genres; ListenBrainz supplies popularity ranking; and the Cover Art Archive supplies artwork. Cinemeta remains the no-credential movie and TV fallback.
+- `app/` — Next.js pages, auth callback, and server-side provider proxy
+- `src/` — interface, catalog adapters, domain logic, auth gate, and persistence client
+- `supabase/migrations/` — canonical production schema and RLS policies
+- `supabase/tests/` — database authorization tests
+- `docs/DEPLOYMENT.md` — Supabase, Vercel, and domain rollout runbook
+- `PRODUCT_BRIEF.md` — product direction and data-model rationale
 
-## TMDB setup
+## Security and privacy
 
-1. Run `zsh scripts/configure-tmdb.sh` and paste your TMDB API Read Access Token at its hidden prompt. The script stores it in macOS Keychain, not in the repository or shell history.
-2. Restart `npm run dev` or `npm run preview`.
+- Personal profiles and library entries are private by default.
+- Browser clients cannot directly mutate shared catalog tables.
+- Validated authenticated database functions resolve external IDs to internal UUIDs.
+- TMDB credentials remain server-side.
+- `.env` files are ignored; only `.env.example` is committed.
 
-For non-macOS environments, copy `.env.example` to `.env` and set `TMDB_READ_ACCESS_TOKEN` or `TMDB_API_KEY`. The Vite server proxy adds the credential to upstream requests; it is never bundled into browser code. `.env` files are ignored by version control.
+Report vulnerabilities privately as described in [SECURITY.md](./SECURITY.md).
 
-## Interface capabilities
+## Contributing
 
-- Browse the catalog or switch to the current profile's shelf in the same table.
-- Move through 100-record pages without loading off-screen posters or retaining thousands of catalog rows in memory.
-- Combine movie, TV, book, and album filters in the same table.
-- Filter by every lifecycle status or titles not yet added.
-- Add a title directly from a row and change its status in place.
-- Open a detail drawer for full metadata, progress, ratings, and TV episode tracking.
-- Switch between four local prototype profiles.
-- Inspect the friend-group overlap matrix and live personal recap.
-
-## Architecture boundary
-
-Provider response shapes are normalized in `src/tmdb.ts`, `src/openlibrary.ts`, `src/musicbrainz.ts`, and `src/catalog.ts`; the rest of the app depends only on the shared `MediaItem` model. User activity is stored separately from catalog records.
-
-For production, move provider requests behind a cache-aware server, use an approved production catalog agreement, and replace browser persistence/profile simulation with authenticated PostgreSQL records and tested row-level access rules. [PRODUCT_BRIEF.md](./PRODUCT_BRIEF.md) contains the fuller product and data model.
-
-## Important limitations
-
-- This is a functional prototype, not a production authentication or privacy implementation.
-- The profile switcher simulates invited users; local profile separation is not a security boundary.
-- Live catalog availability depends on the external metadata provider and network access.
-- ListenBrainz popularity browsing is intentionally capped at its top 1,000 release groups; comprehensive album discovery remains available through MusicBrainz search and filtered browsing.
-- MusicBrainz community ratings are often sparse and are loaded on album detail pages. Listen counts are kept separate and are never presented as ratings.
+Anthology is licensed under the [GNU Affero General Public License v3.0](./LICENSE). See [CONTRIBUTING.md](./CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) before opening a pull request.

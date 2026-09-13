@@ -314,8 +314,9 @@ export async function browseCatalog(options: BrowseCatalogOptions, signal?: Abor
   if (includesBooks) requests.push(browseOpenLibraryCatalog({ ...options, types: ['book'], pageSize: perType }, signal))
   if (includesAlbums) requests.push(browseMusicCatalog({ ...options, types: ['album'], pageSize: perType }, signal))
   const pages = await Promise.all(requests)
+  const uniqueItems = [...new Map(pages.flatMap((page) => page.items).map((item) => [item.id, item])).values()]
   return {
-    items: orderMixedCatalog(pages.flatMap((page) => page.items), options.sort).slice(0, options.pageSize),
+    items: orderMixedCatalog(uniqueItems, options.sort).slice(0, options.pageSize),
     hasNext: pages.some((page) => page.hasNext),
     fetchedCount: pages.reduce((sum, page) => sum + page.fetchedCount, 0),
     source: pages.length === 1 ? pages[0].source : 'Mixed',
