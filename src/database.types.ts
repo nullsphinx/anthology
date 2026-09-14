@@ -213,11 +213,14 @@ export type Database = {
           completed_at: string | null
           completion_count: number
           created_at: string
+          favorite: boolean
           media_item_id: string
           notes: string
           progress: number
           progress_source: Database["public"]["Enums"]["progress_source"]
+          priority: boolean
           rating: number | null
+          review: string
           started_at: string | null
           status: Database["public"]["Enums"]["library_status"]
           updated_at: string
@@ -229,11 +232,14 @@ export type Database = {
           completed_at?: string | null
           completion_count?: number
           created_at?: string
+          favorite?: boolean
           media_item_id: string
           notes?: string
           progress?: number
           progress_source?: Database["public"]["Enums"]["progress_source"]
+          priority?: boolean
           rating?: number | null
+          review?: string
           started_at?: string | null
           status?: Database["public"]["Enums"]["library_status"]
           updated_at?: string
@@ -245,11 +251,14 @@ export type Database = {
           completed_at?: string | null
           completion_count?: number
           created_at?: string
+          favorite?: boolean
           media_item_id?: string
           notes?: string
           progress?: number
           progress_source?: Database["public"]["Enums"]["progress_source"]
+          priority?: boolean
           rating?: number | null
+          review?: string
           started_at?: string | null
           status?: Database["public"]["Enums"]["library_status"]
           updated_at?: string
@@ -550,4 +559,3 @@ export const Constants = {
     },
   },
 } as const
-

@@ -1,7 +1,8 @@
-export type View = 'library' | 'groups' | 'stats'
+export type View = 'library' | 'groups' | 'stats' | 'about'
 export type MediaType = 'movie' | 'show' | 'book' | 'album'
 export type LibraryStatus = 'want' | 'in-progress' | 'paused' | 'completed' | 'dropped'
 export type ProgressSource = 'manual' | 'episodes'
+export const MAX_REVIEW_LENGTH = 250
 
 export interface Season { number: number; title: string; episodes: number }
 
@@ -25,7 +26,7 @@ export interface MediaItem {
   catalogRank?: number
 }
 
-export interface Profile { id: string; name: string; handle: string; initials: string; color: string }
+export interface Profile { id: string; name: string; handle: string; initials: string; color: string; avatar?: string }
 
 export interface LibraryEntry {
   userId: string
@@ -36,6 +37,10 @@ export interface LibraryEntry {
   watchedEpisodes: number[]
   rating: number | null
   completionCount: number
+  favorite: boolean
+  priority: boolean
+  review: string
+  completedAt: string | null
   updatedAt: string
 }
 
@@ -146,8 +151,19 @@ export function getGroupMetrics(catalog: MediaItem[], entries: LibraryEntry[], m
   }).filter((metric) => metric.completed + metric.wanted + metric.active + metric.dropped > 0)
 }
 
-export function getUserStats(catalog: MediaItem[], entries: LibraryEntry[], userId: string): UserStats {
-  const userEntries = entries.filter((entry) => entry.userId === userId)
+export function getUserStats(
+  catalog: MediaItem[],
+  entries: LibraryEntry[],
+  userId: string,
+  options: { type?: MediaType | 'all'; year?: number | null } = {},
+): UserStats {
+  const userEntries = entries.filter((entry) => {
+    if (entry.userId !== userId) return false
+    const item = catalog.find((candidate) => candidate.id === entry.itemId)
+    if (options.type && options.type !== 'all' && item?.type !== options.type) return false
+    if (options.year && new Date(entry.completedAt ?? entry.updatedAt).getFullYear() !== options.year) return false
+    return true
+  })
   const completed = userEntries.filter((entry) => entry.completionCount > 0)
   const ratings = userEntries.map((entry) => entry.rating).filter((rating): rating is number => rating !== null)
   const genres = new Map<string, number>()
@@ -186,6 +202,11 @@ export function seasonEpisodeRange(item: MediaItem, seasonNumber: number): numbe
 
 export function clampProgress(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)))
+}
+
+export function normalizeReview(value: string): string {
+  const plainText = value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+  return Array.from(plainText).slice(0, MAX_REVIEW_LENGTH).join('')
 }
 
 export function formatMinutes(total: number): string {

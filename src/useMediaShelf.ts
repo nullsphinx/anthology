@@ -3,6 +3,7 @@ import { initialState } from './data'
 import {
   clampProgress,
   getEntry,
+  normalizeReview,
   seasonEpisodeRange,
   totalEpisodes,
   type ActivityAction,
@@ -39,6 +40,10 @@ function createEntry(userId: string, itemId: string): LibraryEntry {
     watchedEpisodes: [],
     rating: null,
     completionCount: 0,
+    favorite: false,
+    priority: false,
+    review: '',
+    completedAt: null,
     updatedAt: new Date().toISOString(),
   }
 }
@@ -131,6 +136,7 @@ export function useMediaShelf(remoteUserId?: string) {
           : status === 'want' ? [] : entry.watchedEpisodes,
         progressSource: status === 'completed' && item.type === 'show' && episodeCount ? 'episodes' : entry.progressSource,
         completionCount: isNewCompletion ? entry.completionCount + 1 : entry.completionCount,
+        completedAt: isNewCompletion ? new Date().toISOString() : entry.completedAt,
       }
     }, {
       action: status === 'completed' ? 'completed' : status === 'in-progress' ? 'started' : status === 'paused' ? 'paused' : status === 'dropped' ? 'dropped' : 'saved',
@@ -146,7 +152,23 @@ export function useMediaShelf(remoteUserId?: string) {
       progress,
       progressSource: 'manual',
       completionCount: progress === 100 && entry.status !== 'completed' ? entry.completionCount + 1 : entry.completionCount,
+      completedAt: progress === 100 && entry.status !== 'completed' ? new Date().toISOString() : entry.completedAt,
     }), { action: 'progressed', detail: `${progress}% complete` })
+  }, [updateEntry])
+
+  const toggleFavorite = useCallback((item: MediaItem) => {
+    updateEntry(item, (entry) => entry.status === 'completed' ? { ...entry, favorite: !entry.favorite } : entry)
+  }, [updateEntry])
+
+  const togglePriority = useCallback((item: MediaItem) => {
+    updateEntry(item, (entry) => entry.status === 'want' ? { ...entry, priority: !entry.priority } : entry)
+  }, [updateEntry])
+
+  const adjustCompletionCount = useCallback((item: MediaItem, change: number) => {
+    updateEntry(item, (entry) => entry.status === 'completed'
+      ? { ...entry, completionCount: Math.max(1, Math.min(99, entry.completionCount + change)) }
+      : entry,
+    change > 0 ? { action: 'rewatched', detail: 'completion added' } : undefined)
   }, [updateEntry])
 
   const setRating = useCallback((item: MediaItem, stars: number) => {
@@ -155,6 +177,10 @@ export function useMediaShelf(remoteUserId?: string) {
       action: 'rated',
       detail: rating === null ? 'rating cleared' : `${stars} stars`,
     })
+  }, [updateEntry])
+
+  const setReview = useCallback((item: MediaItem, review: string) => {
+    updateEntry(item, (entry) => ({ ...entry, review: normalizeReview(review) }))
   }, [updateEntry])
 
   const toggleEpisode = useCallback((item: MediaItem, episode: number) => {
@@ -172,6 +198,7 @@ export function useMediaShelf(remoteUserId?: string) {
         progressSource: 'episodes',
         status: completed ? 'completed' : watched.length ? 'in-progress' : 'want',
         completionCount: completed && entry.status !== 'completed' ? entry.completionCount + 1 : entry.completionCount,
+        completedAt: completed && entry.status !== 'completed' ? new Date().toISOString() : entry.completedAt,
       }
     }, { action: 'progressed', detail: `episode ${episode}` })
   }, [updateEntry])
@@ -192,6 +219,7 @@ export function useMediaShelf(remoteUserId?: string) {
         progressSource: 'episodes',
         status: progress === 100 ? 'completed' : watched.length ? 'in-progress' : 'want',
         completionCount: progress === 100 && entry.status !== 'completed' ? entry.completionCount + 1 : entry.completionCount,
+        completedAt: progress === 100 && entry.status !== 'completed' ? new Date().toISOString() : entry.completedAt,
       }
     }, { action: 'progressed', detail: `season ${seasonNumber}` })
   }, [updateEntry])
@@ -220,6 +248,10 @@ export function useMediaShelf(remoteUserId?: string) {
     setStatus,
     setProgress,
     setRating,
+    setReview,
+    toggleFavorite,
+    togglePriority,
+    adjustCompletionCount,
     toggleEpisode,
     toggleSeason,
     removeItem,

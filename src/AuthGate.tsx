@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { BookOpen, LoaderCircle, LogIn, Mail, ShieldCheck } from 'lucide-react'
+import { BookOpen, Check, LoaderCircle, LogIn, Mail, ShieldCheck } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { App } from './App'
+import { avatarPresets, defaultAvatarPreset, normalizeAvatarPreset } from './avatars'
+import { Avatar } from './components'
 import type { Profile } from './domain'
 import { getSupabaseBrowserClient, isSupabaseConfigured, sendSupabaseMagicLink } from './lib/supabase/client'
 
@@ -11,12 +13,13 @@ type StoredProfile = {
   user_id: string
   username: string | null
   display_name: string
+  avatar_url: string | null
 }
 
 function toAppProfile(user: User, profile: StoredProfile): Profile {
   const name = profile.display_name.trim() || profile.username || user.email?.split('@')[0] || 'Reader'
   const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
-  return { id: user.id, name, handle: profile.username ? `@${profile.username}` : '', initials, color: '#f1a36f' }
+  return { id: user.id, name, handle: profile.username ? `@${profile.username}` : '', initials, color: '#f1a36f', avatar: normalizeAvatarPreset(profile.avatar_url) }
 }
 
 function AuthFrame({ children }: { children: ReactNode }) {
@@ -64,6 +67,7 @@ function SignedOut() {
 function ProfileSetup({ user, onComplete }: { user: User; onComplete: (profile: StoredProfile) => void }) {
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState(user.user_metadata.full_name ?? '')
+  const [avatar, setAvatar] = useState(defaultAvatarPreset)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -71,13 +75,14 @@ function ProfileSetup({ user, onComplete }: { user: User; onComplete: (profile: 
     event.preventDefault(); setBusy(true); setMessage('')
     const normalized = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '')
     if (normalized.length < 3) { setMessage('Username must be at least 3 letters, numbers, or underscores.'); setBusy(false); return }
-    const profile = { user_id: user.id, username: normalized, display_name: displayName.trim() || normalized }
+    const profile = { user_id: user.id, username: normalized, display_name: displayName.trim() || normalized, avatar_url: `preset:${normalizeAvatarPreset(avatar)}` }
     const { error } = await getSupabaseBrowserClient()!.from('profiles').upsert(profile)
     if (error) { setMessage(error.code === '23505' ? 'That username is already taken.' : error.message); setBusy(false); return }
     onComplete(profile)
   }
 
-  return <AuthFrame><span className="auth-kicker">One last step</span><h1>Create your profile.</h1><p>Your library is private by default. You can change visibility later.</p><form onSubmit={save}><label><span>Display name</span><div><input required maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></div></label><label><span>Username</span><div><span className="input-prefix">@</span><input required minLength={3} maxLength={30} pattern="[a-zA-Z0-9_]+" value={username} onChange={(event) => setUsername(event.target.value)} /></div></label><button disabled={busy}>{busy ? <LoaderCircle className="spin" /> : null} Create profile</button></form>{message && <div className="auth-message" role="alert">{message}</div>}</AuthFrame>
+  const preview = { id: user.id, name: displayName || username || 'Your profile', handle: '', initials: '', color: '#f1a36f' }
+  return <AuthFrame><span className="auth-kicker">One last step</span><h1>Create your profile.</h1><p>Your library is private by default. You can change visibility later.</p><form onSubmit={save}><label><span>Display name</span><div><input required maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></div></label><label><span>Username</span><div><span className="input-prefix">@</span><input required minLength={3} maxLength={30} pattern="[a-zA-Z0-9_]+" value={username} onChange={(event) => setUsername(event.target.value)} /></div></label><fieldset className="setup-avatar-field"><legend>Profile picture</legend><div className="avatar-options" role="group" aria-label="Profile picture options">{avatarPresets.map((preset) => <button type="button" key={preset.id} className={avatar === preset.id ? 'selected' : ''} onClick={() => setAvatar(preset.id)} aria-label={preset.label} aria-pressed={avatar === preset.id}><Avatar profile={{ ...preview, avatar: preset.id }} />{avatar === preset.id && <Check />}</button>)}</div></fieldset><button disabled={busy}>{busy ? <LoaderCircle className="spin" /> : null} Create profile</button></form>{message && <div className="auth-message" role="alert">{message}</div>}</AuthFrame>
 }
 
 export function AuthGate() {
@@ -89,7 +94,7 @@ export function AuthGate() {
   const loadProfile = useCallback(async (nextUser: User | null) => {
     setUser(nextUser)
     if (!nextUser) { setProfile(null); setLoading(false); return }
-    const { data } = await getSupabaseBrowserClient()!.from('profiles').select('user_id, username, display_name').eq('user_id', nextUser.id).maybeSingle()
+    const { data } = await getSupabaseBrowserClient()!.from('profiles').select('user_id, username, display_name, avatar_url').eq('user_id', nextUser.id).maybeSingle()
     setProfile(data); setLoading(false)
   }, [])
 
@@ -105,5 +110,11 @@ export function AuthGate() {
   if (loading) return <AuthFrame><div className="auth-loading"><LoaderCircle className="spin" /> Loading your shelf…</div></AuthFrame>
   if (!user) return <SignedOut />
   if (!profile?.username) return <ProfileSetup user={user} onComplete={setProfile} />
-  return <App account={toAppProfile(user, profile)} onSignOut={() => getSupabaseBrowserClient()!.auth.signOut()} />
+  const updateAvatar = async (avatar: string) => {
+    const avatarUrl = `preset:${normalizeAvatarPreset(avatar)}`
+    const { error } = await getSupabaseBrowserClient()!.from('profiles').update({ avatar_url: avatarUrl }).eq('user_id', user.id)
+    if (error) throw error
+    setProfile((current) => current ? { ...current, avatar_url: avatarUrl } : current)
+  }
+  return <App account={toAppProfile(user, profile)} onAvatarChange={updateAvatar} onSignOut={() => getSupabaseBrowserClient()!.auth.signOut()} />
 }

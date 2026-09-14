@@ -9,6 +9,8 @@ import {
   getProgressLabel,
   getStatusLabel,
   getUserStats,
+  MAX_REVIEW_LENGTH,
+  normalizeReview,
   seasonEpisodeRange,
   totalEpisodes,
   type LibraryEntry,
@@ -30,7 +32,8 @@ const show: MediaItem = {
 
 const entry = (overrides: Partial<LibraryEntry> = {}): LibraryEntry => ({
   userId: 'john', itemId: movie.id, status: 'in-progress', progress: 40, progressSource: 'manual',
-  watchedEpisodes: [], rating: 80, completionCount: 0, updatedAt: '2026-09-12T00:00:00.000Z', ...overrides,
+  watchedEpisodes: [], rating: 80, completionCount: 0, favorite: false, priority: false,
+  review: '', completedAt: null, updatedAt: '2026-09-12T00:00:00.000Z', ...overrides,
 })
 
 describe('media domain', () => {
@@ -42,6 +45,13 @@ describe('media domain', () => {
     expect(clampProgress(-12)).toBe(0)
     expect(clampProgress(42.4)).toBe(42)
     expect(clampProgress(140)).toBe(100)
+  })
+
+  it('normalizes reviews as bounded plain text without unsafe control characters', () => {
+    const normalized = normalizeReview(`A\u0000 thoughtful <script>alert('x')</script> review ${'z'.repeat(300)}`)
+    expect(normalized).not.toContain('\u0000')
+    expect(normalized).toContain("<script>alert('x')</script>")
+    expect(Array.from(normalized)).toHaveLength(MAX_REVIEW_LENGTH)
   })
 
   it('calculates episode totals and season ranges', () => {
@@ -87,6 +97,17 @@ describe('media domain', () => {
     expect(stats.completed).toBe(1)
     expect(stats.episodes).toBe(2)
     expect(stats.minutes).toBe(196)
+  })
+
+  it('filters stats by activity year and media type', () => {
+    const entries = [
+      entry({ status: 'completed', progress: 100, completionCount: 1, completedAt: '2026-02-10T00:00:00.000Z' }),
+      entry({ itemId: show.id, updatedAt: '2025-04-20T00:00:00.000Z' }),
+    ]
+    expect(getUserStats([movie, show], entries, 'john', { year: 2026 }).completed).toBe(1)
+    expect(getUserStats([movie, show], entries, 'john', { year: 2025 }).completed).toBe(0)
+    expect(getUserStats([movie, show], entries, 'john', { type: 'show' }).episodes).toBe(0)
+    expect(getUserStats([movie, show], entries, 'john', { type: 'movie' }).completed).toBe(1)
   })
 
   it('normalizes real provider metadata into the shared media model', () => {

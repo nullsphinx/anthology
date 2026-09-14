@@ -6,6 +6,7 @@ import { browseTmdbCatalog, clearTmdbCache, fetchTmdbItemDetails } from './tmdb'
 const CINEMETA_BASE = 'https://v3-cinemeta.strem.io'
 const CINEMETA_CATALOG_ORIGIN = 'https://cinemeta-catalogs.strem.io'
 const PAGE_SIZE = 50
+const MUSICBRAINZ_ALBUM_COUNT_SNAPSHOT = 2_321_482
 const catalogPageCache = new Map<string, MediaItem[]>()
 let providerRequestQueue: Promise<unknown> = Promise.resolve()
 
@@ -37,6 +38,44 @@ export interface CatalogPage {
   hasNext: boolean
   fetchedCount: number
   source: 'TMDB' | 'Cinemeta' | 'Open Library' | 'MusicBrainz' | 'Mixed'
+}
+
+export interface CatalogCounts {
+  movies: number | null
+  television: number | null
+  books: number | null
+  albums: number | null
+}
+
+async function fetchProviderCount(url: string, keys: string[], signal?: AbortSignal): Promise<number> {
+  const response = await fetch(url, { signal })
+  if (!response.ok) throw new Error(`Catalog count request failed (${response.status})`)
+  const data = await response.json() as Record<string, unknown>
+  const count = keys.map((key) => data[key]).find((value) => typeof value === 'number')
+  if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) throw new Error('Catalog count response was invalid')
+  return Math.floor(count)
+}
+
+async function fetchOpenLibraryCount(signal?: AbortSignal): Promise<number> {
+  const response = await fetch('/api/openlibrary/stats', { signal })
+  if (!response.ok) throw new Error(`Open Library count request failed (${response.status})`)
+  const stats = await response.text()
+  const worksRow = stats.match(/<tr class="major">[\s\S]*?Works Added[\s\S]*?<\/tr>/i)?.[0]
+  const values = worksRow ? [...worksRow.matchAll(/<td class="amount">([\d,]+)<\/td>/gi)] : []
+  const count = Number(values.at(-1)?.[1].replaceAll(',', ''))
+  if (!Number.isFinite(count) || count < 0) throw new Error('Open Library count response was invalid')
+  return count
+}
+
+export async function fetchCatalogCounts(signal?: AbortSignal): Promise<CatalogCounts> {
+  const requests = await Promise.allSettled([
+    fetchProviderCount('/api/tmdb/3/discover/movie?language=en-US&page=1&include_adult=false', ['total_results'], signal),
+    fetchProviderCount('/api/tmdb/3/discover/tv?language=en-US&page=1&include_adult=false', ['total_results'], signal),
+    fetchOpenLibraryCount(signal),
+    Promise.resolve(MUSICBRAINZ_ALBUM_COUNT_SNAPSHOT),
+  ])
+  const value = (index: number) => requests[index].status === 'fulfilled' ? requests[index].value : null
+  return { movies: value(0), television: value(1), books: value(2), albums: value(3) }
 }
 
 interface CinemetaVideo { season?: number; episode?: number; released?: string }
