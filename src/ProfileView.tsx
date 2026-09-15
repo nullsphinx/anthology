@@ -25,7 +25,7 @@ type ProfileViewProps = {
   onNextUpChange?: (showcases: ProfileShowcases) => Promise<void>
 }
 
-function CoverStrip({ items, label, onOpen, reorderable = false, onReorder }: { items: MediaItem[]; label: string; onOpen?: (item: MediaItem) => void; reorderable?: boolean; onReorder?: (draggedId: string, targetId: string, position: 'before' | 'after') => Promise<void> }) {
+function CoverStrip({ items, label, onOpen, expanded = false, reorderable = false, onReorder }: { items: MediaItem[]; label: string; onOpen?: (item: MediaItem) => void; expanded?: boolean; reorderable?: boolean; onReorder?: (draggedId: string, targetId: string, position: 'before' | 'after') => Promise<void> }) {
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const startDrag = (event: DragEvent<HTMLButtonElement>, itemId: string) => {
     setDraggedId(itemId)
@@ -42,7 +42,7 @@ function CoverStrip({ items, label, onOpen, reorderable = false, onReorder }: { 
   }
 
   return <div className={`profile-cover-strip ${reorderable ? 'reorderable' : ''}`} aria-label={label}>
-    {Array.from({ length: PROFILE_SHOWCASE_LIMIT }, (_, index) => {
+    {Array.from({ length: expanded ? items.length : PROFILE_SHOWCASE_LIMIT }, (_, index) => {
       const item = items[index]
       if (!item) return <div className="profile-cover-slot empty" key={`empty-${index}`} aria-hidden="true"><span>{index + 1}</span></div>
       return <button
@@ -85,6 +85,7 @@ function ShowcaseEditor({ candidates, initial, mode, onCancel, onSave }: { candi
 export function ProfileView({ profile, items, entries, editable = false, onOpen, onVisibilityChange, onShowcasesChange, onNextUpChange }: ProfileViewProps) {
   const [modes, setModes] = useState<Record<MediaType, ShelfMode>>({ movie: 'favorites', show: 'favorites', book: 'favorites', album: 'favorites' })
   const [editing, setEditing] = useState<EditingShelf | null>(null)
+  const [expandedShelves, setExpandedShelves] = useState<Record<string, boolean>>({})
   const [privacyBusy, setPrivacyBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const favoriteShowcases = profile.showcaseItemIds ?? {}
@@ -131,14 +132,19 @@ export function ProfileView({ profile, items, entries, editable = false, onOpen,
     <section className="profile-shelves" aria-label={`${profile.name}'s shelves`}>
       {shelves.map((shelf) => {
         const mode = modes[shelf.type]
-        const shownItems = mode === 'favorites' ? shelf.favorites : shelf.nextUp
+        const expansionKey = `${shelf.type}:${mode}`
+        const expanded = expandedShelves[expansionKey] ?? false
+        const featuredItems = mode === 'favorites' ? shelf.favorites : shelf.nextUp
+        const allItems = mode === 'favorites' ? shelf.completedItems : shelf.nextUpCandidates
+        const shownItems = expanded ? allItems : featuredItems
+        const hasHiddenItems = allItems.length > featuredItems.length
         const editorOpen = editing?.type === shelf.type && editing.mode === mode
         const candidates = mode === 'favorites' ? shelf.favoriteCandidates : shelf.nextUpCandidates
-        const initial = shownItems.map((item) => item.id)
+        const initial = featuredItems.map((item) => item.id)
         const changeMode = (nextMode: ShelfMode) => { setModes((current) => ({ ...current, [shelf.type]: nextMode })); setEditing(null) }
         return <article className={`profile-shelf profile-shelf-${shelf.type}`} key={shelf.type}>
-          <div className="profile-shelf-heading"><div className="profile-shelf-title"><MediaTypeIcon type={shelf.type} size={18} /><div><span>{shelfNames[shelf.type]} shelf</span><strong>{mode === 'favorites' ? shelf.completedCount : shelf.queueCount}</strong><small>{mode === 'favorites' ? completedLabels[shelf.type] : queueLabels[shelf.type]}</small></div></div><div className="profile-shelf-controls">{editable && <button type="button" className={`customize-showcase ${editorOpen ? 'active' : ''}`} onClick={() => setEditing(editorOpen ? null : { type: shelf.type, mode })} aria-label={`Customize ${shelfNames[shelf.type]} ${mode === 'favorites' ? 'favorites' : 'Next up'}`} title={`Customize ${shelfNames[shelf.type]} ${mode === 'favorites' ? 'favorites' : 'Next up'}`}><SquarePen /></button>}<div className="shelf-mode-toggle" role="group" aria-label={`${shelfNames[shelf.type]} shelf display`}><button type="button" className={mode === 'favorites' ? 'active' : ''} onClick={() => changeMode('favorites')}><Star /> Favorites</button><button type="button" className={mode === 'priority' ? 'active' : ''} onClick={() => changeMode('priority')}><Flag /> Next up</button></div></div></div>
-          <div className="profile-shelf-content"><CoverStrip items={shownItems} label={mode === 'favorites' ? `Featured ${mediaTypeLabels[shelf.type]} favorites` : `Featured ${mediaTypeLabels[shelf.type]} Next up titles`} onOpen={onOpen} reorderable={editable && mode === 'favorites' && shownItems.length > 1} onReorder={(draggedId, targetId, position) => reorderFavorites(shelf.type, initial, draggedId, targetId, position)} /></div>
+          <div className="profile-shelf-heading"><div className="profile-shelf-title"><MediaTypeIcon type={shelf.type} size={18} /><div><span>{shelfNames[shelf.type]} shelf</span><strong>{mode === 'favorites' ? shelf.completedCount : shelf.queueCount}</strong><small>{mode === 'favorites' ? completedLabels[shelf.type] : queueLabels[shelf.type]}</small></div></div><div className="profile-shelf-controls"><button type="button" className={`view-all-showcase ${expanded ? 'active' : ''}`} disabled={!expanded && !hasHiddenItems} onClick={() => setExpandedShelves((current) => ({ ...current, [expansionKey]: !expanded }))} aria-pressed={expanded}>{expanded ? 'Show less' : 'View all'}</button>{editable && <button type="button" className={`customize-showcase ${editorOpen ? 'active' : ''}`} onClick={() => setEditing(editorOpen ? null : { type: shelf.type, mode })} aria-label={`Customize ${shelfNames[shelf.type]} ${mode === 'favorites' ? 'favorites' : 'Next up'}`} title={`Customize ${shelfNames[shelf.type]} ${mode === 'favorites' ? 'favorites' : 'Next up'}`}><SquarePen /></button>}<div className="shelf-mode-toggle" role="group" aria-label={`${shelfNames[shelf.type]} shelf display`}><button type="button" className={mode === 'favorites' ? 'active' : ''} onClick={() => changeMode('favorites')}><Star /> Favorites</button><button type="button" className={mode === 'priority' ? 'active' : ''} onClick={() => changeMode('priority')}><Flag /> Next up</button></div></div></div>
+          <div className="profile-shelf-content"><CoverStrip items={shownItems} expanded={expanded} label={expanded ? `All ${mode === 'favorites' ? 'completed' : 'Next up'} ${mediaTypeLabels[shelf.type]} titles` : mode === 'favorites' ? `Featured ${mediaTypeLabels[shelf.type]} favorites` : `Featured ${mediaTypeLabels[shelf.type]} Next up titles`} onOpen={onOpen} reorderable={editable && mode === 'favorites' && !expanded && shownItems.length > 1} onReorder={(draggedId, targetId, position) => reorderFavorites(shelf.type, initial, draggedId, targetId, position)} /></div>
           {editorOpen && <ShowcaseEditor candidates={candidates} initial={initial} mode={mode} onCancel={() => setEditing(null)} onSave={async (ids) => mode === 'favorites' ? onShowcasesChange?.({ ...favoriteShowcases, [shelf.type]: ids }) : onNextUpChange?.({ ...nextUpShowcases, [shelf.type]: ids })} />}
           <div className="shelf-edge" aria-hidden="true" />
         </article>

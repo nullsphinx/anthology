@@ -6,6 +6,7 @@ export type ProfileShelf = {
   type: MediaType
   completedCount: number
   queueCount: number
+  completedItems: MediaItem[]
   favoriteCandidates: MediaItem[]
   nextUpCandidates: MediaItem[]
   favorites: MediaItem[]
@@ -37,11 +38,13 @@ export function buildProfileShelf(
   const itemById = new Map(items.filter((item) => item.type === type).map((item) => [item.id, item]))
   const typedEntries = entries.filter((entry) => entry.userId === userId && itemById.has(entry.itemId))
   const newestFirst = (left: LibraryEntry, right: LibraryEntry) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
-  const favoriteEntries = typedEntries.filter((entry) => entry.status === 'completed' && entry.favorite).sort(newestFirst)
+  const completedEntries = typedEntries.filter((entry) => entry.status === 'completed').sort(newestFirst)
+  const favoriteEntries = completedEntries.filter((entry) => entry.favorite)
   const queueEntries = typedEntries
     .filter((entry) => entry.status === 'want')
     .sort((left, right) => Number(right.priority) - Number(left.priority) || newestFirst(left, right))
   const favoriteCandidates = favoriteEntries.map((entry) => itemById.get(entry.itemId)!).filter(Boolean)
+  const completedItems = completedEntries.map((entry) => itemById.get(entry.itemId)!).filter(Boolean)
   const nextUpCandidates = queueEntries.map((entry) => itemById.get(entry.itemId)!).filter(Boolean)
   const favoriteIds = favoriteShowcases[type]
   const nextUpIds = nextUpShowcases[type]
@@ -60,8 +63,9 @@ export function buildProfileShelf(
 
   return {
     type,
-    completedCount: typedEntries.filter((entry) => entry.status === 'completed').length,
+    completedCount: completedEntries.length,
     queueCount: queueEntries.length,
+    completedItems,
     favoriteCandidates,
     nextUpCandidates,
     favorites,

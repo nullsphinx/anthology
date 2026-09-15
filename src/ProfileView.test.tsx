@@ -76,6 +76,40 @@ afterEach(async () => {
 })
 
 describe('profile shelf controls', () => {
+  it('keeps View all off by default and expands every completed title', async () => {
+    const completedItems = Array.from({ length: 14 }, (_, index) => item(`completed-${index}`, `Completed ${index}`))
+    const completedEntries = completedItems.map((candidate, index) => entry(candidate.id, 'completed', { favorite: index < 2, updatedAt: new Date(Date.UTC(2026, 0, index + 1)).toISOString() }))
+    const view = await renderProfile({ items: completedItems, entries: completedEntries })
+    const movieShelf = view.querySelector<HTMLElement>('.profile-shelf-movie')!
+    const viewAll = movieShelf.querySelector<HTMLButtonElement>('.view-all-showcase')!
+
+    expect(viewAll.textContent).toBe('View all')
+    expect(viewAll.getAttribute('aria-pressed')).toBe('false')
+    expect(movieShelf.querySelectorAll('.profile-cover-slot')).toHaveLength(12)
+    await act(async () => viewAll.click())
+
+    expect(viewAll.textContent).toBe('Show less')
+    expect(viewAll.getAttribute('aria-pressed')).toBe('true')
+    expect(movieShelf.querySelectorAll('button.profile-cover-slot')).toHaveLength(14)
+    expect(movieShelf.textContent).not.toContain('Choose up to twelve')
+  })
+
+  it('expands all Next up titles independently from completed titles', async () => {
+    const queuedItems = Array.from({ length: 14 }, (_, index) => item(`queue-${index}`, `Queue ${index}`))
+    const queuedEntries = queuedItems.map((candidate, index) => entry(candidate.id, 'want', { priority: index < 3, updatedAt: new Date(Date.UTC(2026, 0, index + 1)).toISOString() }))
+    const view = await renderProfile({ items: queuedItems, entries: queuedEntries })
+    const movieShelf = view.querySelector<HTMLElement>('.profile-shelf-movie')!
+    const nextUp = Array.from(movieShelf.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('Next up'))!
+    await act(async () => nextUp.click())
+    const viewAll = movieShelf.querySelector<HTMLButtonElement>('.view-all-showcase')!
+
+    expect(viewAll.getAttribute('aria-pressed')).toBe('false')
+    expect(movieShelf.querySelectorAll('button.profile-cover-slot')).toHaveLength(12)
+    await act(async () => viewAll.click())
+    expect(movieShelf.querySelectorAll('button.profile-cover-slot')).toHaveLength(14)
+    expect(viewAll.textContent).toBe('Show less')
+  })
+
   it('customizes Next up independently after switching modes', async () => {
     const saveNextUp = vi.fn(async (_showcases: ProfileShowcases) => {})
     const view = await renderProfile({ onNextUpChange: saveNextUp })

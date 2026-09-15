@@ -12,6 +12,7 @@ describe('profile shelves', () => {
     const shelf = buildProfileShelf('movie', items, entries, 'john')
     expect(shelf.favorites.map((candidate) => candidate.id)).toEqual(['movie-13', 'movie-12', 'movie-11', 'movie-10', 'movie-9', 'movie-8', 'movie-7', 'movie-6', 'movie-5', 'movie-4', 'movie-3', 'movie-2'])
     expect(shelf.favorites).toHaveLength(PROFILE_SHOWCASE_LIMIT)
+    expect(shelf.completedItems.map((candidate) => candidate.id)).toEqual(['movie-13', 'movie-12', 'movie-11', 'movie-10', 'movie-9', 'movie-8', 'movie-7', 'movie-6', 'movie-5', 'movie-4', 'movie-3', 'movie-2', 'movie-1', 'movie-0'])
     expect(shelf.completedCount).toBe(14)
   })
 
