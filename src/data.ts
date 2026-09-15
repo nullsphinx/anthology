@@ -1,7 +1,7 @@
 import type { Profile, ShelfState } from './domain'
 
 export const profiles: Profile[] = [
-  { id: 'john', name: 'John', handle: '@john', initials: 'JH', color: '#f1a36f', avatar: 'ember' },
+  { id: 'john', name: 'John', handle: '@john', initials: 'JH', color: '#f1a36f', avatar: 'ember', visibility: 'private', showcaseItemIds: {} },
   { id: 'maya', name: 'Maya', handle: '@mayawatches', initials: 'MK', color: '#b9d98c', avatar: 'sage' },
   { id: 'leo', name: 'Leo', handle: '@leonights', initials: 'LR', color: '#8db7e8', avatar: 'sky' },
   { id: 'noor', name: 'Noor', handle: '@noor', initials: 'NA', color: '#d4a5d8', avatar: 'plum' },

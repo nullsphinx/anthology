@@ -12,6 +12,7 @@ import {
   Menu,
   RotateCw,
   Search,
+  UserRound,
   Users,
   X,
 } from 'lucide-react'
@@ -29,14 +30,19 @@ import {
   type MediaItem,
   type MediaType,
   type Profile,
+  type ProfileShowcases,
+  type ProfileVisibility,
   type View,
 } from './domain'
+import { ProfileView } from './ProfileView'
+import { normalizeProfileShowcases } from './profile'
 import { useMediaShelf } from './useMediaShelf'
 
 const PAGE_SIZE = 100
 const mediaTypes: MediaType[] = ['movie', 'show', 'book', 'album']
 const GITHUB_URL = 'https://github.com/nullsphinx/anthology'
 const AVATAR_STORAGE_KEY = 'anthology-avatar-presets-v1'
+const PROFILE_STORAGE_KEY = 'anthology-profile-settings-v1'
 const navItems: { id: View; label: string }[] = [
   { id: 'library', label: 'Explore' },
   { id: 'groups', label: 'Community' },
@@ -61,6 +67,21 @@ function loadAvatarSelections(): Record<string, string> {
   } catch {
     return {}
   }
+}
+
+type LocalProfileSettings = Record<string, { visibility?: ProfileVisibility; showcaseItemIds?: ProfileShowcases }>
+
+function loadProfileSettings(): LocalProfileSettings {
+  if (typeof window === 'undefined') return {}
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(PROFILE_STORAGE_KEY) ?? '{}') as Record<string, unknown>
+    return Object.fromEntries(Object.entries(saved).flatMap(([userId, value]) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+      const record = value as Record<string, unknown>
+      const visibility = record.visibility === 'public' || record.visibility === 'friends' ? record.visibility : 'private'
+      return [[userId, { visibility, showcaseItemIds: normalizeProfileShowcases(record.showcaseItemIds) }]]
+    }))
+  } catch { return {} }
 }
 
 const libraryMeta: Record<MediaType, { label: string; heading: string; description: string; empty: string; search: string }> = {
@@ -97,8 +118,9 @@ function Header({ view, libraryType, current, account, onUserChange, onAvatarCha
       <button className={`header-icon-link about-link ${view === 'about' ? 'active' : ''}`} onClick={() => navigate('about')} aria-label="About Anthology" title="About Anthology"><Info /></button>
       <a className="header-icon-link github-link" href={GITHUB_URL} target="_blank" rel="noreferrer" aria-label="View Anthology on GitHub" title="View on GitHub"><GitHubMark /></a>
       <div className="profile-menu">
-        <button className="profile-trigger" onClick={() => setProfileOpen((open) => !open)} aria-expanded={profileOpen} aria-label="Choose profile picture"><Avatar profile={current} size="small" /><span>{current.name}</span><ChevronDown /></button>
+        <button className={`profile-trigger ${view === 'profile' ? 'active' : ''}`} onClick={() => setProfileOpen((open) => !open)} aria-expanded={profileOpen} aria-label="Open profile menu"><Avatar profile={current} size="small" /></button>
         {profileOpen && <div className="avatar-popover">
+          <button className="my-profile-button" onClick={() => { onChange('profile'); setProfileOpen(false); onCloseMenu() }}><UserRound /> My profile</button>
           <div className="avatar-popover-heading"><strong>Profile picture</strong><span>Choose from twenty portraits and designs</span></div>
           {!account && <label className="preview-profile"><span>Preview profile</span><select value={current.id} onChange={(event) => onUserChange(event.target.value)}>{profiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name}</option>)}</select><ChevronDown /></label>}
           <div className="avatar-options" role="group" aria-label="Profile picture options">{avatarPresets.map((preset) => {
@@ -343,7 +365,7 @@ function AboutView() {
   </div>
 }
 
-export function App({ account, onSignOut, onAvatarChange }: { account?: Profile; onSignOut?: () => void; onAvatarChange?: (avatar: string) => Promise<void> } = {}) {
+export function App({ account, onSignOut, onAvatarChange, onProfileSettingsChange }: { account?: Profile; onSignOut?: () => void; onAvatarChange?: (avatar: string) => Promise<void>; onProfileSettingsChange?: (changes: { visibility?: ProfileVisibility; showcaseItemIds?: ProfileShowcases }) => Promise<void> } = {}) {
   const shelf = useMediaShelf(account?.id)
   const [view, setView] = useState<View>('library')
   const [types, setTypes] = useState<MediaType[]>(mediaTypes)
@@ -353,12 +375,14 @@ export function App({ account, onSignOut, onAvatarChange }: { account?: Profile;
   const [detailLoading, setDetailLoading] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
   const [avatarSelections, setAvatarSelections] = useState<Record<string, string>>({})
-  useEffect(() => setAvatarSelections(loadAvatarSelections()), [])
+  const [profileSettings, setProfileSettings] = useState<LocalProfileSettings>({})
+  useEffect(() => { setAvatarSelections(loadAvatarSelections()); setProfileSettings(loadProfileSettings()) }, [])
   const openItem = async (item: MediaItem) => { setSelectedItem(item); setDetailLoading(true); try { const details = await fetchItemDetails(item); setSelectedItem((current) => current?.id === item.id ? details : current); if (getEntry(shelf.state.entries, shelf.state.currentUserId, item.id)) shelf.saveItemDetails(details) } catch { /* Keep the table record usable if optional details fail. */ } finally { setDetailLoading(false) } }
   const selectExplore = () => { setLibraryType(null); setView('library') }
   const selectLibraryType = (type: MediaType) => { setLibraryType(type); setCatalogLoading(false); setView('library') }
   const baseProfile = account ?? profiles.find((profile) => profile.id === shelf.state.currentUserId) ?? profiles[0]
-  const currentProfile = { ...baseProfile, avatar: avatarSelections[baseProfile.id] ?? normalizeAvatarPreset(baseProfile.avatar) }
+  const localProfileSettings = profileSettings[baseProfile.id]
+  const currentProfile = { ...baseProfile, ...localProfileSettings, avatar: avatarSelections[baseProfile.id] ?? normalizeAvatarPreset(baseProfile.avatar), visibility: localProfileSettings?.visibility ?? baseProfile.visibility ?? 'private', showcaseItemIds: localProfileSettings?.showcaseItemIds ?? baseProfile.showcaseItemIds ?? {} }
   const changeAvatar = async (avatar: string) => {
     const selected = normalizeAvatarPreset(avatar)
     const previous = avatarSelections[baseProfile.id]
@@ -374,6 +398,21 @@ export function App({ account, onSignOut, onAvatarChange }: { account?: Profile;
       throw error
     }
   }
+  const changeProfileSettings = async (changes: { visibility?: ProfileVisibility; showcaseItemIds?: ProfileShowcases }) => {
+    const previous = profileSettings[baseProfile.id]
+    const nextForProfile = { visibility: currentProfile.visibility, showcaseItemIds: currentProfile.showcaseItemIds, ...changes }
+    const next = { ...profileSettings, [baseProfile.id]: nextForProfile }
+    setProfileSettings(next)
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(next))
+    try { await onProfileSettingsChange?.(changes) } catch (error) {
+      const reverted = { ...next }
+      if (previous) reverted[baseProfile.id] = previous
+      else delete reverted[baseProfile.id]
+      setProfileSettings(reverted)
+      window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(reverted))
+      throw error
+    }
+  }
   const selectedEntry = selectedItem ? getEntry(shelf.state.entries, shelf.state.currentUserId, selectedItem.id) : undefined
-  return <div className="app-shell"><Header view={view} libraryType={libraryType} current={currentProfile} account={account} onUserChange={shelf.setCurrentUser} onAvatarChange={changeAvatar} onSignOut={onSignOut} onChange={setView} onExplore={selectExplore} onSelectLibrary={selectLibraryType} menuOpen={navOpen} onToggleMenu={() => setNavOpen((open) => !open)} onCloseMenu={() => setNavOpen(false)} /><div className="app-main">{shelf.syncError && <div className="sync-error" role="alert"><span>{shelf.syncError}</span><button onClick={shelf.clearSyncError}>Dismiss</button></div>}<main>{view === 'library' && (libraryType ? <PersonalLibraryView type={libraryType} shelf={shelf} onOpen={openItem} onExplore={selectExplore} onLoadingChange={setCatalogLoading} /> : <ExploreView shelf={shelf} onOpen={openItem} onLoadingChange={setCatalogLoading} types={types} onTypesChange={setTypes} />)}{view === 'groups' && <GroupsView shelf={shelf} onOpen={openItem} />}{view === 'stats' && <StatsView shelf={shelf} />}{view === 'about' && <AboutView />}</main><footer className="app-footer"><span>Anthology © 2026 · <a href={`${GITHUB_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer">AGPL-3.0</a></span>{!account && <button onClick={shelf.resetShelf}>Clear local shelf</button>}</footer></div>{selectedItem && <DetailPanel item={selectedItem} entry={selectedEntry} loading={detailLoading} onClose={() => setSelectedItem(null)} onStatus={(status) => shelf.setStatus(selectedItem, status)} onProgress={(progress) => shelf.setProgress(selectedItem, progress)} onRating={(rating) => shelf.setRating(selectedItem, rating)} onReview={(review) => shelf.setReview(selectedItem, review)} onEpisode={(episode) => shelf.toggleEpisode(selectedItem, episode)} onSeason={(season) => shelf.toggleSeason(selectedItem, season)} onRemove={() => { shelf.removeItem(selectedItem.id); setSelectedItem(null) }} />}</div>
+  return <div className="app-shell"><Header view={view} libraryType={libraryType} current={currentProfile} account={account} onUserChange={shelf.setCurrentUser} onAvatarChange={changeAvatar} onSignOut={onSignOut} onChange={setView} onExplore={selectExplore} onSelectLibrary={selectLibraryType} menuOpen={navOpen} onToggleMenu={() => setNavOpen((open) => !open)} onCloseMenu={() => setNavOpen(false)} /><div className="app-main">{shelf.syncError && <div className="sync-error" role="alert"><span>{shelf.syncError}</span><button onClick={shelf.clearSyncError}>Dismiss</button></div>}<main>{view === 'library' && (libraryType ? <PersonalLibraryView type={libraryType} shelf={shelf} onOpen={openItem} onExplore={selectExplore} onLoadingChange={setCatalogLoading} /> : <ExploreView shelf={shelf} onOpen={openItem} onLoadingChange={setCatalogLoading} types={types} onTypesChange={setTypes} />)}{view === 'groups' && <GroupsView shelf={shelf} onOpen={openItem} />}{view === 'stats' && <StatsView shelf={shelf} />}{view === 'profile' && <ProfileView profile={currentProfile} items={shelf.state.items} entries={shelf.state.entries} editable onOpen={openItem} onVisibilityChange={(visibility) => changeProfileSettings({ visibility })} onShowcasesChange={(showcaseItemIds) => changeProfileSettings({ showcaseItemIds })} />}{view === 'about' && <AboutView />}</main><footer className="app-footer"><span>Anthology © 2026 · <a href={`${GITHUB_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer">AGPL-3.0</a></span>{!account && <button onClick={shelf.resetShelf}>Clear local shelf</button>}</footer></div>{selectedItem && <DetailPanel item={selectedItem} entry={selectedEntry} loading={detailLoading} onClose={() => setSelectedItem(null)} onStatus={(status) => shelf.setStatus(selectedItem, status)} onProgress={(progress) => shelf.setProgress(selectedItem, progress)} onRating={(rating) => shelf.setRating(selectedItem, rating)} onReview={(review) => shelf.setReview(selectedItem, review)} onEpisode={(episode) => shelf.toggleEpisode(selectedItem, episode)} onSeason={(season) => shelf.toggleSeason(selectedItem, season)} onRemove={() => { shelf.removeItem(selectedItem.id); setSelectedItem(null) }} />}</div>
 }

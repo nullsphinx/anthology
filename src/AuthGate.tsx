@@ -6,7 +6,9 @@ import type { User } from '@supabase/supabase-js'
 import { App } from './App'
 import { avatarPresets, defaultAvatarPreset, normalizeAvatarPreset } from './avatars'
 import { Avatar } from './components'
-import type { Profile } from './domain'
+import type { Json } from './database.types'
+import type { Profile, ProfileShowcases, ProfileVisibility } from './domain'
+import { normalizeProfileShowcases } from './profile'
 import { getSupabaseBrowserClient, isSupabaseConfigured, sendSupabaseMagicLink } from './lib/supabase/client'
 
 type StoredProfile = {
@@ -14,12 +16,14 @@ type StoredProfile = {
   username: string | null
   display_name: string
   avatar_url: string | null
+  visibility: ProfileVisibility
+  showcase_item_ids: Json
 }
 
 function toAppProfile(user: User, profile: StoredProfile): Profile {
   const name = profile.display_name.trim() || profile.username || user.email?.split('@')[0] || 'Reader'
   const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
-  return { id: user.id, name, handle: profile.username ? `@${profile.username}` : '', initials, color: '#f1a36f', avatar: normalizeAvatarPreset(profile.avatar_url) }
+  return { id: user.id, name, handle: profile.username ? `@${profile.username}` : '', initials, color: '#f1a36f', avatar: normalizeAvatarPreset(profile.avatar_url), visibility: profile.visibility, showcaseItemIds: normalizeProfileShowcases(profile.showcase_item_ids) }
 }
 
 function AuthFrame({ children }: { children: ReactNode }) {
@@ -75,7 +79,7 @@ function ProfileSetup({ user, onComplete }: { user: User; onComplete: (profile: 
     event.preventDefault(); setBusy(true); setMessage('')
     const normalized = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '')
     if (normalized.length < 3) { setMessage('Username must be at least 3 letters, numbers, or underscores.'); setBusy(false); return }
-    const profile = { user_id: user.id, username: normalized, display_name: displayName.trim() || normalized, avatar_url: `preset:${normalizeAvatarPreset(avatar)}` }
+    const profile: StoredProfile = { user_id: user.id, username: normalized, display_name: displayName.trim() || normalized, avatar_url: `preset:${normalizeAvatarPreset(avatar)}`, visibility: 'private', showcase_item_ids: {} }
     const { error } = await getSupabaseBrowserClient()!.from('profiles').upsert(profile)
     if (error) { setMessage(error.code === '23505' ? 'That username is already taken.' : error.message); setBusy(false); return }
     onComplete(profile)
@@ -94,7 +98,7 @@ export function AuthGate() {
   const loadProfile = useCallback(async (nextUser: User | null) => {
     setUser(nextUser)
     if (!nextUser) { setProfile(null); setLoading(false); return }
-    const { data } = await getSupabaseBrowserClient()!.from('profiles').select('user_id, username, display_name, avatar_url').eq('user_id', nextUser.id).maybeSingle()
+    const { data } = await getSupabaseBrowserClient()!.from('profiles').select('user_id, username, display_name, avatar_url, visibility, showcase_item_ids').eq('user_id', nextUser.id).maybeSingle()
     setProfile(data); setLoading(false)
   }, [])
 
@@ -116,5 +120,13 @@ export function AuthGate() {
     if (error) throw error
     setProfile((current) => current ? { ...current, avatar_url: avatarUrl } : current)
   }
-  return <App account={toAppProfile(user, profile)} onAvatarChange={updateAvatar} onSignOut={() => getSupabaseBrowserClient()!.auth.signOut()} />
+  const updateProfileSettings = async (changes: { visibility?: ProfileVisibility; showcaseItemIds?: ProfileShowcases }) => {
+    const update: { visibility?: ProfileVisibility; showcase_item_ids?: ProfileShowcases } = {}
+    if (changes.visibility) update.visibility = changes.visibility
+    if (changes.showcaseItemIds) update.showcase_item_ids = normalizeProfileShowcases(changes.showcaseItemIds)
+    const { error } = await getSupabaseBrowserClient()!.from('profiles').update(update).eq('user_id', user.id)
+    if (error) throw error
+    setProfile((current) => current ? { ...current, ...(update.visibility ? { visibility: update.visibility } : {}), ...(update.showcase_item_ids ? { showcase_item_ids: update.showcase_item_ids } : {}) } : current)
+  }
+  return <App account={toAppProfile(user, profile)} onAvatarChange={updateAvatar} onProfileSettingsChange={updateProfileSettings} onSignOut={() => getSupabaseBrowserClient()!.auth.signOut()} />
 }

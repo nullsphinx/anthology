@@ -1,7 +1,9 @@
-export type View = 'library' | 'groups' | 'stats' | 'about'
+export type View = 'library' | 'groups' | 'stats' | 'profile' | 'about'
 export type MediaType = 'movie' | 'show' | 'book' | 'album'
 export type LibraryStatus = 'want' | 'in-progress' | 'paused' | 'completed' | 'dropped'
 export type ProgressSource = 'manual' | 'episodes'
+export type ProfileVisibility = 'private' | 'friends' | 'public'
+export type ProfileShowcases = Partial<Record<MediaType, string[]>>
 export const MAX_REVIEW_LENGTH = 250
 
 export interface Season { number: number; title: string; episodes: number }
@@ -26,7 +28,16 @@ export interface MediaItem {
   catalogRank?: number
 }
 
-export interface Profile { id: string; name: string; handle: string; initials: string; color: string; avatar?: string }
+export interface Profile {
+  id: string
+  name: string
+  handle: string
+  initials: string
+  color: string
+  avatar?: string
+  visibility?: ProfileVisibility
+  showcaseItemIds?: ProfileShowcases
+}
 
 export interface LibraryEntry {
   userId: string

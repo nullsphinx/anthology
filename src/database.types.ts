@@ -348,6 +348,7 @@ export type Database = {
           bio: string
           created_at: string
           display_name: string
+          showcase_item_ids: Json
           updated_at: string
           user_id: string
           username: string | null
@@ -358,6 +359,7 @@ export type Database = {
           bio?: string
           created_at?: string
           display_name?: string
+          showcase_item_ids?: Json
           updated_at?: string
           user_id: string
           username?: string | null
@@ -368,6 +370,7 @@ export type Database = {
           bio?: string
           created_at?: string
           display_name?: string
+          showcase_item_ids?: Json
           updated_at?: string
           user_id?: string
           username?: string | null
@@ -391,6 +394,10 @@ export type Database = {
           item: Json
         }[]
       }
+      get_public_profile: {
+        Args: { p_username: string }
+        Returns: Json
+      }
       is_group_member: {
         Args: { target_group: string; target_user: string }
         Returns: boolean
@@ -406,6 +413,10 @@ export type Database = {
       save_library_item: {
         Args: { p_entry: Json; p_item: Json }
         Returns: string
+      }
+      valid_profile_showcases: {
+        Args: { candidate: Json }
+        Returns: boolean
       }
     }
     Enums: {

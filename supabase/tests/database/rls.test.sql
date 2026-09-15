@@ -1,5 +1,5 @@
 begin;
-select plan(17);
+select plan(25);
 
 insert into public.invites (email)
 values ('owner@example.test'), ('invited@example.test'), ('expired@example.test');
@@ -36,7 +36,7 @@ set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
 
 select lives_ok(
-  $$ update public.profiles set display_name = 'Owner' where user_id = '00000000-0000-0000-0000-000000000001' $$,
+  $$ update public.profiles set display_name = 'Owner', username = 'owner' where user_id = '00000000-0000-0000-0000-000000000001' $$,
   'a user can update their own profile'
 );
 select is((select display_name from public.profiles where user_id = '00000000-0000-0000-0000-000000000001'), 'Owner', 'own profile is visible');
@@ -60,15 +60,27 @@ select throws_ok(
   'review exceeds 250 characters',
   'the database rejects reviews over 250 characters'
 );
+select lives_ok(
+  $$ update public.profiles set visibility = 'public', showcase_item_ids = '{"movie":["tmdb:movie:550"]}'::jsonb where user_id = '00000000-0000-0000-0000-000000000001' $$,
+  'an owner can publish a profile with a validated showcase'
+);
+select ok(public.valid_profile_showcases('{"movie":["1","2","3","4","5","6","7","8","9","10"]}'::jsonb), 'a shelf accepts ten featured items');
+select ok(public.valid_profile_showcases('{"movie":["1","2","3","4","5","6","7","8","9","10","11","12"]}'::jsonb), 'a shelf accepts twelve featured items');
+select is(public.get_public_profile('OWNER') -> 'profile' ->> 'displayName', 'Owner', 'public profile lookup is case-insensitive');
+select is(jsonb_array_length(public.get_public_profile('owner') -> 'library'), 1, 'a public profile includes its shelf');
+select is(public.get_public_profile('owner') -> 'library' -> 0 -> 'entry' ->> 'review', '', 'public profile data never exposes reviews');
 
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}', true);
 select is((select count(*)::integer from public.library_entries), 0, 'another user cannot read a private entry');
+select is(jsonb_array_length(public.get_public_profile('owner') -> 'library'), 1, 'a viewer can load a deliberately public profile despite entry-level privacy');
 select lives_ok(
   $$ update public.profiles set display_name = 'Stolen' where user_id = '00000000-0000-0000-0000-000000000001' $$,
   'an unauthorized update is safely filtered'
 );
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
 select is((select display_name from public.profiles where user_id = '00000000-0000-0000-0000-000000000001'), 'Owner', 'another user cannot change the owner profile');
+update public.profiles set visibility = 'private' where user_id = '00000000-0000-0000-0000-000000000001';
+select is(public.get_public_profile('owner'), null, 'private profiles are indistinguishable from missing profiles to the share endpoint');
 
 select * from finish();
 rollback;
