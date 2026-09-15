@@ -15,14 +15,32 @@ describe('profile shelves', () => {
     expect(shelf.completedCount).toBe(14)
   })
 
-  it('honors a custom order and separates priority queue items', () => {
-    const items = [item('a'), item('b'), item('c')]
-    const entries = [entry('a'), entry('b'), entry('c', { status: 'want', progress: 0, favorite: false, priority: true })]
+  it('honors a custom order and puts priority items first in the next-up queue', () => {
+    const items = [item('a'), item('b'), item('c'), item('d')]
+    const entries = [
+      entry('a'),
+      entry('b'),
+      entry('c', { status: 'want', progress: 0, favorite: false, priority: true, updatedAt: '2026-01-01T00:00:00Z' }),
+      entry('d', { status: 'want', progress: 0, favorite: false, priority: false, updatedAt: '2026-02-01T00:00:00Z' }),
+    ]
     const shelf = buildProfileShelf('movie', items, entries, 'john', { movie: ['b', 'a'] })
     expect(shelf.favorites.map((candidate) => candidate.id)).toEqual(['b', 'a'])
-    expect(shelf.priorities.map((candidate) => candidate.id)).toEqual(['c'])
-    expect(shelf.queueCount).toBe(1)
+    expect(shelf.nextUp.map((candidate) => candidate.id)).toEqual(['c', 'd'])
+    expect(shelf.queueCount).toBe(2)
     expect(shelf.customized).toBe(true)
+  })
+
+  it('fills next up from the newest watchlist entries when nothing is prioritized', () => {
+    const items = Array.from({ length: 14 }, (_, index) => item(`queued-${index}`))
+    const entries = items.map((candidate, index) => entry(candidate.id, {
+      status: 'want',
+      progress: 0,
+      favorite: false,
+      updatedAt: new Date(Date.UTC(2026, 0, index + 1)).toISOString(),
+    }))
+    const shelf = buildProfileShelf('movie', items, entries, 'john')
+    expect(shelf.nextUp.map((candidate) => candidate.id)).toEqual(['queued-13', 'queued-12', 'queued-11', 'queued-10', 'queued-9', 'queued-8', 'queued-7', 'queued-6', 'queued-5', 'queued-4', 'queued-3', 'queued-2'])
+    expect(shelf.queueCount).toBe(14)
   })
 
   it('normalizes untrusted showcase settings to allowed shelves and twelve unique IDs', () => {
