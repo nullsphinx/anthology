@@ -7,9 +7,11 @@ export type ProfileShelf = {
   completedCount: number
   queueCount: number
   favoriteCandidates: MediaItem[]
+  nextUpCandidates: MediaItem[]
   favorites: MediaItem[]
   nextUp: MediaItem[]
-  customized: boolean
+  favoritesCustomized: boolean
+  nextUpCustomized: boolean
 }
 
 export function normalizeProfileShowcases(value: unknown): ProfileShowcases {
@@ -29,7 +31,8 @@ export function buildProfileShelf(
   items: MediaItem[],
   entries: LibraryEntry[],
   userId: string,
-  showcases: ProfileShowcases = {},
+  favoriteShowcases: ProfileShowcases = {},
+  nextUpShowcases: ProfileShowcases = {},
 ): ProfileShelf {
   const itemById = new Map(items.filter((item) => item.type === type).map((item) => [item.id, item]))
   const typedEntries = entries.filter((entry) => entry.userId === userId && itemById.has(entry.itemId))
@@ -39,24 +42,40 @@ export function buildProfileShelf(
     .filter((entry) => entry.status === 'want')
     .sort((left, right) => Number(right.priority) - Number(left.priority) || newestFirst(left, right))
   const favoriteCandidates = favoriteEntries.map((entry) => itemById.get(entry.itemId)!).filter(Boolean)
-  const configuredIds = showcases[type]
-  const favorites = configuredIds
-    ? configuredIds.flatMap((id) => {
+  const nextUpCandidates = queueEntries.map((entry) => itemById.get(entry.itemId)!).filter(Boolean)
+  const favoriteIds = favoriteShowcases[type]
+  const nextUpIds = nextUpShowcases[type]
+  const favorites = favoriteIds
+    ? favoriteIds.flatMap((id) => {
       const item = itemById.get(id)
       return item && favoriteEntries.some((entry) => entry.itemId === item.id) ? [item] : []
     })
     : favoriteCandidates.slice(0, PROFILE_SHOWCASE_LIMIT)
+  const nextUp = nextUpIds
+    ? nextUpIds.flatMap((id) => {
+      const item = itemById.get(id)
+      return item && queueEntries.some((entry) => entry.itemId === item.id) ? [item] : []
+    })
+    : nextUpCandidates.slice(0, PROFILE_SHOWCASE_LIMIT)
 
   return {
     type,
     completedCount: typedEntries.filter((entry) => entry.status === 'completed').length,
     queueCount: queueEntries.length,
     favoriteCandidates,
+    nextUpCandidates,
     favorites,
-    nextUp: queueEntries
-      .map((entry) => itemById.get(entry.itemId)!)
-      .filter(Boolean)
-      .slice(0, PROFILE_SHOWCASE_LIMIT),
-    customized: configuredIds !== undefined,
+    nextUp,
+    favoritesCustomized: favoriteIds !== undefined,
+    nextUpCustomized: nextUpIds !== undefined,
   }
+}
+
+export function reorderShowcaseItems(ids: string[], draggedId: string, targetId: string, position: 'before' | 'after' = 'before'): string[] {
+  if (draggedId === targetId || !ids.includes(draggedId) || !ids.includes(targetId)) return ids
+  const reordered = ids.filter((id) => id !== draggedId)
+  const targetIndex = reordered.indexOf(targetId)
+  reordered.splice(position === 'after' ? targetIndex + 1 : targetIndex, 0, draggedId)
+  if (reordered.every((id, index) => id === ids[index])) return ids
+  return reordered
 }

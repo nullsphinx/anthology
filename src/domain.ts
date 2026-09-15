@@ -37,6 +37,7 @@ export interface Profile {
   avatar?: string
   visibility?: ProfileVisibility
   showcaseItemIds?: ProfileShowcases
+  nextUpItemIds?: ProfileShowcases
 }
 
 export interface LibraryEntry {

@@ -348,6 +348,7 @@ export type Database = {
           bio: string
           created_at: string
           display_name: string
+          next_up_item_ids: Json
           showcase_item_ids: Json
           updated_at: string
           user_id: string
@@ -359,6 +360,7 @@ export type Database = {
           bio?: string
           created_at?: string
           display_name?: string
+          next_up_item_ids?: Json
           showcase_item_ids?: Json
           updated_at?: string
           user_id: string
@@ -370,6 +372,7 @@ export type Database = {
           bio?: string
           created_at?: string
           display_name?: string
+          next_up_item_ids?: Json
           showcase_item_ids?: Json
           updated_at?: string
           user_id?: string

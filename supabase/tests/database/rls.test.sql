@@ -1,5 +1,5 @@
 begin;
-select plan(25);
+select plan(26);
 
 insert into public.invites (email)
 values ('owner@example.test'), ('invited@example.test'), ('expired@example.test');
@@ -61,12 +61,13 @@ select throws_ok(
   'the database rejects reviews over 250 characters'
 );
 select lives_ok(
-  $$ update public.profiles set visibility = 'public', showcase_item_ids = '{"movie":["tmdb:movie:550"]}'::jsonb where user_id = '00000000-0000-0000-0000-000000000001' $$,
-  'an owner can publish a profile with a validated showcase'
+  $$ update public.profiles set visibility = 'public', showcase_item_ids = '{"movie":["tmdb:movie:550"]}'::jsonb, next_up_item_ids = '{"movie":["tmdb:movie:550"]}'::jsonb where user_id = '00000000-0000-0000-0000-000000000001' $$,
+  'an owner can publish a profile with validated favorite and Next up showcases'
 );
 select ok(public.valid_profile_showcases('{"movie":["1","2","3","4","5","6","7","8","9","10"]}'::jsonb), 'a shelf accepts ten featured items');
 select ok(public.valid_profile_showcases('{"movie":["1","2","3","4","5","6","7","8","9","10","11","12"]}'::jsonb), 'a shelf accepts twelve featured items');
 select is(public.get_public_profile('OWNER') -> 'profile' ->> 'displayName', 'Owner', 'public profile lookup is case-insensitive');
+select is(public.get_public_profile('owner') -> 'profile' -> 'nextUpItemIds' -> 'movie' ->> 0, 'tmdb:movie:550', 'a public profile includes its custom Next up order');
 select is(jsonb_array_length(public.get_public_profile('owner') -> 'library'), 1, 'a public profile includes its shelf');
 select is(public.get_public_profile('owner') -> 'library' -> 0 -> 'entry' ->> 'review', '', 'public profile data never exposes reviews');
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LibraryEntry, MediaItem } from './domain'
-import { buildProfileShelf, normalizeProfileShowcases, PROFILE_SHOWCASE_LIMIT } from './profile'
+import { buildProfileShelf, normalizeProfileShowcases, PROFILE_SHOWCASE_LIMIT, reorderShowcaseItems } from './profile'
 
 const item = (id: string): MediaItem => ({ id, externalId: id, title: id, type: 'movie', year: 2026, releaseInfo: '2026', genres: [], summary: '', creator: '', communityRating: 8, provider: 'TMDB', providerUrl: '' })
 const entry = (itemId: string, overrides: Partial<LibraryEntry> = {}): LibraryEntry => ({ userId: 'john', itemId, status: 'completed', progress: 100, progressSource: 'manual', watchedEpisodes: [], rating: null, completionCount: 1, favorite: true, priority: false, review: '', completedAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', ...overrides })
@@ -27,7 +27,20 @@ describe('profile shelves', () => {
     expect(shelf.favorites.map((candidate) => candidate.id)).toEqual(['b', 'a'])
     expect(shelf.nextUp.map((candidate) => candidate.id)).toEqual(['c', 'd'])
     expect(shelf.queueCount).toBe(2)
-    expect(shelf.customized).toBe(true)
+    expect(shelf.favoritesCustomized).toBe(true)
+    expect(shelf.nextUpCustomized).toBe(false)
+  })
+
+  it('honors an independent custom order for Next up', () => {
+    const items = [item('a'), item('b')]
+    const entries = [
+      entry('a', { status: 'want', progress: 0, favorite: false, priority: true }),
+      entry('b', { status: 'want', progress: 0, favorite: false }),
+    ]
+    const shelf = buildProfileShelf('movie', items, entries, 'john', {}, { movie: ['b', 'a'] })
+    expect(shelf.nextUp.map((candidate) => candidate.id)).toEqual(['b', 'a'])
+    expect(shelf.favoritesCustomized).toBe(false)
+    expect(shelf.nextUpCustomized).toBe(true)
   })
 
   it('fills next up from the newest watchlist entries when nothing is prioritized', () => {
@@ -45,5 +58,14 @@ describe('profile shelves', () => {
 
   it('normalizes untrusted showcase settings to allowed shelves and twelve unique IDs', () => {
     expect(normalizeProfileShowcases({ movie: ['a', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm'], unknown: ['x'], book: 'bad' })).toEqual({ movie: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'] })
+  })
+
+  it('reorders a dragged favorite before its drop target without mutating the input', () => {
+    const original = ['a', 'b', 'c', 'd']
+    expect(reorderShowcaseItems(original, 'd', 'b')).toEqual(['a', 'd', 'b', 'c'])
+    expect(reorderShowcaseItems(original, 'a', 'c', 'after')).toEqual(['b', 'c', 'a', 'd'])
+    expect(original).toEqual(['a', 'b', 'c', 'd'])
+    expect(reorderShowcaseItems(original, 'missing', 'b')).toBe(original)
+    expect(reorderShowcaseItems(original, 'b', 'c')).toBe(original)
   })
 })

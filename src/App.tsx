@@ -69,7 +69,7 @@ function loadAvatarSelections(): Record<string, string> {
   }
 }
 
-type LocalProfileSettings = Record<string, { visibility?: ProfileVisibility; showcaseItemIds?: ProfileShowcases }>
+type LocalProfileSettings = Record<string, { visibility?: ProfileVisibility; showcaseItemIds?: ProfileShowcases; nextUpItemIds?: ProfileShowcases }>
 
 function loadProfileSettings(): LocalProfileSettings {
   if (typeof window === 'undefined') return {}
@@ -79,7 +79,7 @@ function loadProfileSettings(): LocalProfileSettings {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return []
       const record = value as Record<string, unknown>
       const visibility = record.visibility === 'public' || record.visibility === 'friends' ? record.visibility : 'private'
-      return [[userId, { visibility, showcaseItemIds: normalizeProfileShowcases(record.showcaseItemIds) }]]
+      return [[userId, { visibility, showcaseItemIds: normalizeProfileShowcases(record.showcaseItemIds), nextUpItemIds: normalizeProfileShowcases(record.nextUpItemIds) }]]
     }))
   } catch { return {} }
 }
@@ -365,7 +365,7 @@ function AboutView() {
   </div>
 }
 
-export function App({ account, onSignOut, onAvatarChange, onProfileSettingsChange }: { account?: Profile; onSignOut?: () => void; onAvatarChange?: (avatar: string) => Promise<void>; onProfileSettingsChange?: (changes: { visibility?: ProfileVisibility; showcaseItemIds?: ProfileShowcases }) => Promise<void> } = {}) {
+export function App({ account, onSignOut, onAvatarChange, onProfileSettingsChange }: { account?: Profile; onSignOut?: () => void; onAvatarChange?: (avatar: string) => Promise<void>; onProfileSettingsChange?: (changes: { visibility?: ProfileVisibility; showcaseItemIds?: ProfileShowcases; nextUpItemIds?: ProfileShowcases }) => Promise<void> } = {}) {
   const shelf = useMediaShelf(account?.id)
   const [view, setView] = useState<View>('library')
   const [types, setTypes] = useState<MediaType[]>(mediaTypes)
@@ -382,7 +382,7 @@ export function App({ account, onSignOut, onAvatarChange, onProfileSettingsChang
   const selectLibraryType = (type: MediaType) => { setLibraryType(type); setCatalogLoading(false); setView('library') }
   const baseProfile = account ?? profiles.find((profile) => profile.id === shelf.state.currentUserId) ?? profiles[0]
   const localProfileSettings = profileSettings[baseProfile.id]
-  const currentProfile = { ...baseProfile, ...localProfileSettings, avatar: avatarSelections[baseProfile.id] ?? normalizeAvatarPreset(baseProfile.avatar), visibility: localProfileSettings?.visibility ?? baseProfile.visibility ?? 'private', showcaseItemIds: localProfileSettings?.showcaseItemIds ?? baseProfile.showcaseItemIds ?? {} }
+  const currentProfile = { ...baseProfile, ...localProfileSettings, avatar: avatarSelections[baseProfile.id] ?? normalizeAvatarPreset(baseProfile.avatar), visibility: localProfileSettings?.visibility ?? baseProfile.visibility ?? 'private', showcaseItemIds: localProfileSettings?.showcaseItemIds ?? baseProfile.showcaseItemIds ?? {}, nextUpItemIds: localProfileSettings?.nextUpItemIds ?? baseProfile.nextUpItemIds ?? {} }
   const changeAvatar = async (avatar: string) => {
     const selected = normalizeAvatarPreset(avatar)
     const previous = avatarSelections[baseProfile.id]
@@ -398,9 +398,9 @@ export function App({ account, onSignOut, onAvatarChange, onProfileSettingsChang
       throw error
     }
   }
-  const changeProfileSettings = async (changes: { visibility?: ProfileVisibility; showcaseItemIds?: ProfileShowcases }) => {
+  const changeProfileSettings = async (changes: { visibility?: ProfileVisibility; showcaseItemIds?: ProfileShowcases; nextUpItemIds?: ProfileShowcases }) => {
     const previous = profileSettings[baseProfile.id]
-    const nextForProfile = { visibility: currentProfile.visibility, showcaseItemIds: currentProfile.showcaseItemIds, ...changes }
+    const nextForProfile = { visibility: currentProfile.visibility, showcaseItemIds: currentProfile.showcaseItemIds, nextUpItemIds: currentProfile.nextUpItemIds, ...changes }
     const next = { ...profileSettings, [baseProfile.id]: nextForProfile }
     setProfileSettings(next)
     window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(next))
@@ -414,5 +414,5 @@ export function App({ account, onSignOut, onAvatarChange, onProfileSettingsChang
     }
   }
   const selectedEntry = selectedItem ? getEntry(shelf.state.entries, shelf.state.currentUserId, selectedItem.id) : undefined
-  return <div className="app-shell"><Header view={view} libraryType={libraryType} current={currentProfile} account={account} onUserChange={shelf.setCurrentUser} onAvatarChange={changeAvatar} onSignOut={onSignOut} onChange={setView} onExplore={selectExplore} onSelectLibrary={selectLibraryType} menuOpen={navOpen} onToggleMenu={() => setNavOpen((open) => !open)} onCloseMenu={() => setNavOpen(false)} /><div className="app-main">{shelf.syncError && <div className="sync-error" role="alert"><span>{shelf.syncError}</span><button onClick={shelf.clearSyncError}>Dismiss</button></div>}<main>{view === 'library' && (libraryType ? <PersonalLibraryView type={libraryType} shelf={shelf} onOpen={openItem} onExplore={selectExplore} onLoadingChange={setCatalogLoading} /> : <ExploreView shelf={shelf} onOpen={openItem} onLoadingChange={setCatalogLoading} types={types} onTypesChange={setTypes} />)}{view === 'groups' && <GroupsView shelf={shelf} onOpen={openItem} />}{view === 'stats' && <StatsView shelf={shelf} />}{view === 'profile' && <ProfileView profile={currentProfile} items={shelf.state.items} entries={shelf.state.entries} editable onOpen={openItem} onVisibilityChange={(visibility) => changeProfileSettings({ visibility })} onShowcasesChange={(showcaseItemIds) => changeProfileSettings({ showcaseItemIds })} />}{view === 'about' && <AboutView />}</main><footer className="app-footer"><span>Anthology © 2026 · <a href={`${GITHUB_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer">AGPL-3.0</a></span>{!account && <button onClick={shelf.resetShelf}>Clear local shelf</button>}</footer></div>{selectedItem && <DetailPanel item={selectedItem} entry={selectedEntry} loading={detailLoading} onClose={() => setSelectedItem(null)} onStatus={(status) => shelf.setStatus(selectedItem, status)} onProgress={(progress) => shelf.setProgress(selectedItem, progress)} onRating={(rating) => shelf.setRating(selectedItem, rating)} onReview={(review) => shelf.setReview(selectedItem, review)} onEpisode={(episode) => shelf.toggleEpisode(selectedItem, episode)} onSeason={(season) => shelf.toggleSeason(selectedItem, season)} onRemove={() => { shelf.removeItem(selectedItem.id); setSelectedItem(null) }} />}</div>
+  return <div className="app-shell"><Header view={view} libraryType={libraryType} current={currentProfile} account={account} onUserChange={shelf.setCurrentUser} onAvatarChange={changeAvatar} onSignOut={onSignOut} onChange={setView} onExplore={selectExplore} onSelectLibrary={selectLibraryType} menuOpen={navOpen} onToggleMenu={() => setNavOpen((open) => !open)} onCloseMenu={() => setNavOpen(false)} /><div className="app-main">{shelf.syncError && <div className="sync-error" role="alert"><span>{shelf.syncError}</span><button onClick={shelf.clearSyncError}>Dismiss</button></div>}<main>{view === 'library' && (libraryType ? <PersonalLibraryView type={libraryType} shelf={shelf} onOpen={openItem} onExplore={selectExplore} onLoadingChange={setCatalogLoading} /> : <ExploreView shelf={shelf} onOpen={openItem} onLoadingChange={setCatalogLoading} types={types} onTypesChange={setTypes} />)}{view === 'groups' && <GroupsView shelf={shelf} onOpen={openItem} />}{view === 'stats' && <StatsView shelf={shelf} />}{view === 'profile' && <ProfileView profile={currentProfile} items={shelf.state.items} entries={shelf.state.entries} editable onOpen={openItem} onVisibilityChange={(visibility) => changeProfileSettings({ visibility })} onShowcasesChange={(showcaseItemIds) => changeProfileSettings({ showcaseItemIds })} onNextUpChange={(nextUpItemIds) => changeProfileSettings({ nextUpItemIds })} />}{view === 'about' && <AboutView />}</main><footer className="app-footer"><span>Anthology © 2026 · <a href={`${GITHUB_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer">AGPL-3.0</a></span>{!account && <button onClick={shelf.resetShelf}>Clear local shelf</button>}</footer></div>{selectedItem && <DetailPanel item={selectedItem} entry={selectedEntry} loading={detailLoading} onClose={() => setSelectedItem(null)} onStatus={(status) => shelf.setStatus(selectedItem, status)} onProgress={(progress) => shelf.setProgress(selectedItem, progress)} onRating={(rating) => shelf.setRating(selectedItem, rating)} onReview={(review) => shelf.setReview(selectedItem, review)} onEpisode={(episode) => shelf.toggleEpisode(selectedItem, episode)} onSeason={(season) => shelf.toggleSeason(selectedItem, season)} onRemove={() => { shelf.removeItem(selectedItem.id); setSelectedItem(null) }} />}</div>
 }

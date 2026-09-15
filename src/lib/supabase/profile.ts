@@ -32,6 +32,7 @@ export async function loadPublicProfile(username: string): Promise<SharedProfile
       avatar: normalizeAvatarPreset(typeof stored.avatarUrl === 'string' ? stored.avatarUrl : undefined),
       visibility: 'public',
       showcaseItemIds: normalizeProfileShowcases(stored.showcaseItemIds),
+      nextUpItemIds: normalizeProfileShowcases(stored.nextUpItemIds),
     },
     items: rows.map((row) => row.item as unknown as MediaItem),
     entries: rows.map((row) => ({ ...(row.entry as unknown as LibraryEntry), userId })),
