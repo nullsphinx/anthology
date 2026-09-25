@@ -367,7 +367,7 @@ function AboutView() {
 
 export function App({ account, onSignOut, onAvatarChange, onProfileSettingsChange }: { account?: Profile; onSignOut?: () => void; onAvatarChange?: (avatar: string) => Promise<void>; onProfileSettingsChange?: (changes: { visibility?: ProfileVisibility; showcaseItemIds?: ProfileShowcases; nextUpItemIds?: ProfileShowcases }) => Promise<void> } = {}) {
   const shelf = useMediaShelf(account?.id)
-  const [view, setView] = useState<View>('library')
+  const [view, setView] = useState<View>(account ? 'profile' : 'library')
   const [types, setTypes] = useState<MediaType[]>(mediaTypes)
   const [libraryType, setLibraryType] = useState<MediaType | null>(null)
   const [, setCatalogLoading] = useState(true)

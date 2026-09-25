@@ -390,6 +390,10 @@ export type Database = {
         Args: { first_user: string; second_user: string }
         Returns: boolean
       }
+      request_invite: {
+        Args: { p_email: string }
+        Returns: undefined
+      }
       get_my_library: {
         Args: never
         Returns: {
