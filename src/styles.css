@@ -470,3 +470,16 @@ h1, h2 { font-family: inherit; }
 }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+.auth-modes { display: flex; gap: 6px; margin: 20px 0; padding: 4px; border: 1px solid var(--line); border-radius: 10px; }
+.auth-modes button { flex: 1; min-height: 40px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; font-size: 12px; cursor: pointer; }
+.auth-modes button[aria-pressed="true"] { color: #171717; background: var(--coral); font-weight: 700; }
+
+.auth-local-note { margin-bottom: 20px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+.auth-local-note strong { color: var(--cream); }
+.auth-local-note p, .auth-delivery p { margin: 6px 0; }
+.auth-local-note a, .auth-delivery a { color: var(--coral); text-decoration: underline; }
+.auth-delivery { font-size: 13px; padding: 16px; }
+.auth-delivery strong, .auth-delivery span { display: block; overflow-wrap: anywhere; }
+.auth-delivery strong { color: var(--cream); font-size: 15px; }
+.auth-delivery-success { border-color: var(--coral); }

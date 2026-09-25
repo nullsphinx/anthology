@@ -9,7 +9,7 @@ import { Avatar } from './components'
 import type { Json } from './database.types'
 import type { Profile, ProfileShowcases, ProfileVisibility } from './domain'
 import { normalizeProfileShowcases } from './profile'
-import { getSupabaseBrowserClient, isSupabaseConfigured, sendSupabaseMagicLink } from './lib/supabase/client'
+import { getLocalAuthInboxUrl, getSupabaseBrowserClient, isSupabaseConfigured, sendSupabaseMagicLink } from './lib/supabase/client'
 
 type StoredProfile = {
   user_id: string
@@ -33,6 +33,9 @@ function AuthFrame({ children }: { children: ReactNode }) {
 
 function SignedOut() {
   const [email, setEmail] = useState('')
+  const [requestInvite, setRequestInvite] = useState(false)
+  const [sentTo, setSentTo] = useState('')
+  const localInbox = getLocalAuthInboxUrl()
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const googleEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
@@ -47,17 +50,27 @@ function SignedOut() {
   }, [])
 
   const sendLink = async (event: FormEvent) => {
-    event.preventDefault(); setBusy(true); setMessage('')
-    const { error } = await sendSupabaseMagicLink(email.trim(), `${window.location.origin}/auth/callback`)
-    const rateLimited = error?.code === 'over_email_send_rate_limit' || error?.message.toLowerCase().includes('rate limit')
-    setMessage(error
-      ? rateLimited
-        ? 'Too many sign-in links were requested. Please wait a few minutes, then request one new link.'
-        : error.message.includes('Signups not allowed')
-          ? 'This private alpha requires an invitation.'
-          : error.message
-      : 'Check your email for a secure sign-in link.')
-    setBusy(false)
+    event.preventDefault(); setBusy(true); setMessage(''); setSentTo('')
+    try {
+      const { error } = await sendSupabaseMagicLink(email, `${window.location.origin}/auth/callback`, requestInvite)
+      const rateLimited = error?.code === 'over_email_send_rate_limit' || error?.message.toLowerCase().includes('rate limit')
+      if (!error) setSentTo(email.trim().toLowerCase())
+      setMessage(error
+        ? rateLimited
+          ? 'Too many email links were requested. Please wait a few minutes, then try again.'
+          : error.message.includes('invitation') || error.message.includes('Signups not allowed')
+            ? 'New to Anthology? Choose “Sign up” above to get started.'
+            : 'We couldn’t send your email link. Please try again in a moment.'
+        : localInbox
+          ? 'Your link is in the local test inbox. It will not arrive in your real mailbox.'
+          : requestInvite
+          ? 'Check your email for your invite link. Follow it to verify your email and create your profile. Already have an account? The link will sign you in.'
+          : 'Check your email for a secure sign-in link.')
+    } catch {
+      setMessage('We couldn’t connect. Check your connection and try again.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const signInWithGoogle = async () => {
@@ -66,7 +79,28 @@ function SignedOut() {
     if (error) { setMessage(error.message); setBusy(false) }
   }
 
-  return <AuthFrame><span className="auth-kicker"><ShieldCheck /> Private alpha</span><h1>Your stories, all in one place.</h1><p>Sign in with an invited email to build a private, persistent shelf across movies, television, books, and albums.</p><form onSubmit={sendLink}><label><span>Email address</span><div><Mail /><input type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></div></label><button disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <LogIn />} Email me a sign-in link</button></form>{googleEnabled && <button className="oauth-button" onClick={signInWithGoogle} disabled={busy}>Continue with Google</button>}{message && <div className="auth-message" role="status">{message}</div>}<small>Anthology is invite-only while the foundation is being tested.</small></AuthFrame>
+  return <AuthFrame>
+    <span className="auth-kicker"><ShieldCheck /> Early access</span>
+    <div className="auth-modes" role="group" aria-label="Account access">
+      <button type="button" aria-pressed={!requestInvite} disabled={busy} onClick={() => { if (requestInvite) { setRequestInvite(false); setMessage(''); setSentTo('') } }}>Sign in</button>
+      <button type="button" aria-pressed={requestInvite} disabled={busy} onClick={() => { if (!requestInvite) { setRequestInvite(true); setMessage(''); setSentTo('') } }}>Sign up</button>
+    </div>
+    <h1>{requestInvite ? 'Sign up for Anthology.' : 'Sign in to Anthology.'}</h1>
+    <p>{requestInvite ? 'Request an invite and we’ll email you a secure link to join Anthology and create your profile.' : 'Sign in to build your shelf across movies, television, books, and albums.'}</p>
+    {localInbox && <aside className="auth-local-note"><strong>Local email testing</strong><p>Emails go to the test inbox, not your real mailbox. Local accounts are separate from live Anthology; choose Sign up to create one.</p><a href={localInbox} target="_blank" rel="noreferrer">Open local email inbox</a></aside>}
+    <form onSubmit={sendLink} aria-busy={busy}>
+      <label><span>Email address</span><div><Mail /><input type="email" required maxLength={254} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" disabled={busy} /></div></label>
+      <button disabled={busy}>{busy ? <LoaderCircle className="spin" /> : requestInvite ? <Mail /> : <LogIn />}{busy ? 'Sending email…' : requestInvite ? 'Email me an invite link' : 'Email me a sign-in link'}</button>
+    </form>
+    {googleEnabled && !requestInvite && <button className="oauth-button" onClick={signInWithGoogle} disabled={busy}>Continue with Google</button>}
+    {(busy || message) && <div className={`auth-message auth-delivery ${sentTo ? 'auth-delivery-success' : ''}`} role="status" aria-live="polite" aria-atomic="true">
+      <strong>{busy ? 'Sending your email link…' : sentTo ? localInbox ? 'Email delivered to the test inbox' : 'Email link sent' : 'Email link not sent'}</strong>
+      {sentTo && <span>For {sentTo}</span>}
+      {!busy && <p>{message}</p>}
+      {sentTo && localInbox && <a href={localInbox} target="_blank" rel="noreferrer">Open your email in the local inbox</a>}
+    </div>}
+    <small>{requestInvite ? 'No password needed. Your profile and library are private by default.' : 'Use the newest email link. Choose Sign up to request an invite and join.'}</small>
+  </AuthFrame>
 }
 
 function ProfileSetup({ user, onComplete }: { user: User; onComplete: (profile: StoredProfile) => void }) {

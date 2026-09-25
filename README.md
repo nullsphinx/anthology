@@ -2,7 +2,7 @@
 
 Anthology is an open-source, unified shelf for movies, television, books, and albums. It combines comprehensive provider-backed discovery with private personal tracking: planned, in progress, paused, completed, and dropped states; progress; ratings; episode tracking; repeat completions; group overlap; and personal recaps.
 
-The project is currently an invite-only alpha. The catalog is real and searchable; authenticated shelf data persists in Postgres with row-level security.
+The project is currently an early-access alpha. New users can request an email invitation from the sign-in page and create a private profile after verifying their email. The catalog is real and searchable; authenticated shelf data persists in Postgres with row-level security.
 
 ## Stack
 
